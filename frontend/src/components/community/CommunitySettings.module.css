@@ -1,0 +1,164 @@
+.header {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+}
+
+.name {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menuBtn {
+  background: none;
+  color: var(--text-muted);
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.menuBtn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0.5rem;
+  right: 0.5rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.375rem;
+  z-index: 100;
+  box-shadow: var(--shadow-lg);
+}
+
+.dropdownItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  background: none;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.dropdownItem:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.dropdownItem.danger {
+  color: var(--danger);
+}
+
+.dropdownItem.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.inviteBar {
+  position: absolute;
+  top: 100%;
+  left: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.625rem;
+  margin-top: 0.25rem;
+  z-index: 99;
+  box-shadow: var(--shadow-md);
+}
+
+.inviteCode {
+  flex: 1;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+}
+
+.copyBtn {
+  padding: 0.25rem 0.625rem;
+  background: var(--accent-primary);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s;
+  white-space: nowrap;
+}
+
+.copyBtn:hover {
+  background: var(--accent-hover);
+}
+
+.inviteCloseBtn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.125rem;
+  line-height: 1;
+  padding: 0.125rem 0.25rem;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, background-color 0.15s;
+  flex-shrink: 0;
+}
+
+.inviteCloseBtn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.errorBar {
+  position: absolute;
+  top: 100%;
+  left: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--danger);
+  color: #fff;
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.625rem;
+  margin-top: 0.25rem;
+  z-index: 98;
+  font-size: 0.8125rem;
+  box-shadow: var(--shadow-md);
+}
+
+.errorBar span {
+  flex: 1;
+}
+
+.errorBar .inviteCloseBtn {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.errorBar .inviteCloseBtn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+}

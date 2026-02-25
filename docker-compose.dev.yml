@@ -1,0 +1,53 @@
+version: "3.9"
+
+# Development overrides - use with:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: builder
+    command: ["go", "run", "./cmd/server"]
+    volumes:
+      - ./backend:/app
+    ports:
+      - "${API_PORT}:${API_PORT}"
+    environment:
+      APP_ENV: development
+      API_LOG_LEVEL: debug
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      NODE_ENV: development
+
+  nginx:
+    depends_on:
+      api:
+        condition: service_started
+      frontend:
+        condition: service_started
