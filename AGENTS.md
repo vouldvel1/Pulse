@@ -43,17 +43,14 @@ go test ./...                # Run tests (none currently exist)
 
 ### Running a Single Test
 ```bash
-# Backend - run specific test file
 go test -v ./internal/api/... -run TestFunctionName
-
-# Frontend - add test files first (no tests currently exist)
 ```
 
 ## Code Style
 
 ### Go Backend
 
-**Imports**: Grouped and ordered:
+**Imports** - Grouped and ordered:
 1. Standard library (`fmt`, `net/http`, etc.)
 2. Third-party packages (`github.com/...`)
 3. Internal packages (`github.com/pulse-chat/pulse/internal/...`)
@@ -73,32 +70,22 @@ import (
 )
 ```
 
-**Naming**:
-- Types: `PascalCase` (e.g., `UserHandler`, `CommunityQueries`)
-- Functions/Methods: `PascalCase` (e.g., `NewUserHandler`, `SearchUsers`)
-- Variables/Constants: `camelCase` or `PascalCase` for exported, `camelCase` for unexported
-- Interfaces: `Nouner` pattern (e.g., `Reader`, `Writer`) or descriptive (e.g., `UserHandler`)
+**Naming**: Types/Functions: `PascalCase`, Variables: `camelCase`, Exported: `PascalCase`
+**Interfaces**: `Nouner` pattern (e.g., `Reader`, `Writer`) or descriptive (e.g., `UserHandler`)
+**Structs**: Use JSON tags (`` `json:"field_name"` ``), pointer types for nullable fields
+**DTOs**: Define response DTOs separately from database models
 
-**Types & Structs**:
-- Use struct tags for JSON serialization: `` `json:"field_name"` ``
-- Use pointer types (`*string`) for nullable fields
-- Define response DTOs separately from database models
+**Error Handling**: Return errors from functions; handle at handler level. Use `writeError(w, status, "message")` for API errors. Log with context: `log.Printf("failed to do thing: %v", err)`
 
-**Error Handling**:
-- Return errors from functions; handle at handler level
-- Use `writeError(w, status, "message")` for API errors
-- Log errors with context: `log.Printf("failed to do thing: %v", err)`
-
-**HTTP Handlers**:
-- Follow pattern: `func (h *HandlerType) HandlerName(w http.ResponseWriter, r *http.Request)`
-- Extract path params from `r.PathValue()`
-- Query params from `r.URL.Query().Get()`
+**HTTP Handlers**: `func (h *HandlerType) HandlerName(w http.ResponseWriter, r *http.Request)`
+- Path params: `r.PathValue()`
+- Query params: `r.URL.Query().Get()`
 - Return early on validation failure
 
 ### Frontend (React + TypeScript)
 
-**Imports**: Organized groups:
-1. React/core imports (`react`, `react-router-dom`)
+**Imports** - Organized groups:
+1. React/core (`react`, `react-router-dom`)
 2. External libraries (`zustand`, `livekit-client`)
 3. Internal modules (`@/components/...`, `@/stores/...`, `@/types`)
 
@@ -109,24 +96,15 @@ import type { User, Message } from '@/types';
 import { api } from '@/utils/api';
 ```
 
-**Types**:
-- Use explicit types for interfaces and state
-- Use `type` for unions/tuples, `interface` for objects
-- Import types explicitly: `import type { User }`
-
-**Components**:
-- Use functional components with hooks
-- Name components: `PascalCase` (e.g., `ChatView`, `MessageItem`)
-- Co-locate styles as CSS modules or inline styles for simple cases
-
-**State Management (Zustand)**:
+**Types**: Use `type` for unions/tuples, `interface` for objects. Import explicitly: `import type { User }`
+**Components**: Functional components with hooks, `PascalCase` names
+**State (Zustand)**:
 ```typescript
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
 }
-
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
@@ -134,48 +112,31 @@ export const useAuthStore = create<AuthState>((set) => ({
 }));
 ```
 
-**Naming**:
-- Files: `camelCase.ts` for utilities, `PascalCase.tsx` for components
-- Hooks: `useCamelCase` (e.g., `useWebRTC`, `useVoicePing`)
-- Stores: `*Store.ts` (e.g., `authStore.ts`, `messageStore.ts`)
-- Types: `PascalCase` in `types/index.ts`
-
-**Error Handling**:
-- Use try/catch in async functions
-- Set error state in stores: `set({ error: message })`
-- Display errors in UI components
+**Naming**: Files: `camelCase.ts` utils, `PascalCase.tsx` components. Hooks: `useCamelCase`. Stores: `*Store.ts`
 
 ## API Conventions
 
-### REST Endpoints
-- `GET /api/resource` - List
-- `GET /api/resource/{id}` - Get one
-- `POST /api/resource` - Create
-- `PATCH /api/resource/{id}` - Update
-- `DELETE /api/resource/{id}` - Delete
-
-### JSON Naming
-- Use snake_case for API fields: `user_id`, `created_at`, `is_private`
-- Frontend converts to camelCase for internal use
+**REST Endpoints**: `GET /api/resource`, `GET /api/resource/{id}`, `POST /api/resource`, `PATCH /api/resource/{id}`, `DELETE /api/resource/{id}`
+**JSON**: snake_case for API (`user_id`, `created_at`), frontend converts to camelCase
 
 ## Database Patterns
 
 - Use `pgx` for database operations
-- Define queries in `/internal/db/` with separate query objects per entity
-- Use UUIDs for all ID fields
+- Separate query objects per entity in `/internal/db/`
+- UUIDs for all ID fields
 - Include `CreatedAt`/`UpdatedAt` timestamps
 
-## WebSocket Conventions
+## WebSocket
 
 - Client connects to `/ws` endpoint
-- Messages follow Discord-like payload structure
-- Use hub/broadcaster pattern for room-based messaging
+- Discord-like payload structure
+- Hub/broadcaster pattern for room-based messaging
 
 ## Testing
 
 No tests currently exist. When adding tests:
 - Backend: `*_test.go` files in same package
-- Frontend: `*.test.ts` or `*.spec.ts` files (consider Vitest)
+- Frontend: `*.test.ts` or `*.spec.ts` files (Vitest recommended)
 - Run linting before committing
 
 ## Key Dependencies
