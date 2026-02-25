@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pulse | Material 3 Expressive</title>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* M3 Dark Palette - Deep Amethyst */
+            --bg-base: #0F0D13;
+            --surface: #1C1B21;
+            --surface-container: #25232A;
+            --surface-bright: #2B2930;
+            --primary: #D0BCFF;
+            --on-primary: #381E72;
+            --primary-container: #4F378B;
+            --secondary: #CCC2DC;
+            --outline: #938F99;
+            --pulse-accent: #EADDFF;
+            --role-admin: #FFB4AB;
+            --role-mod: #87D0CB;
+            --success: #81C784;
+            --error: #F2B8B5;
+
+            --radius-xl: 28px;
+            --radius-pill: 100px;
+            --radius-m3: 18px;
+        }
+
+        * { box-sizing: border-box; transition: background 0.3s, transform 0.2s, border 0.2s; }
+
+        body, html {
+            margin: 0; padding: 0; height: 100%;
+            font-family: 'Google Sans', sans-serif;
+            background-color: var(--bg-base);
+            color: #E6E1E5;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- TOP BAR --- */
+        .top-bar {
+            height: 72px;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 24px;
+            background: var(--bg-base);
+            z-index: 100;
+        }
+
+        .server-list { display: flex; gap: 12px; align-items: center; }
+
+        .dm-home {
+            width: 48px; height: 48px;
+            background: var(--primary-container);
+            border-radius: var(--radius-pill);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-size: 20px;
+        }
+
+        .server-icon {
+            width: 48px; height: 48px;
+            background: var(--surface);
+            border-radius: var(--radius-m3);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-weight: 700;
+        }
+
+        .server-icon.active { border: 2px solid var(--primary); background: var(--primary-container); }
+
+        .project-brand {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 22px; font-weight: 700; color: var(--primary);
+        }
+
+        .pulse-icon { width: 32px; height: 32px; stroke: var(--primary); stroke-width: 2.5; fill: none; }
+
+        /* --- MAIN LAYOUT --- */
+        .main-layout {
+            display: flex; flex: 1; padding: 0 12px 12px 12px; gap: 10px;
+            overflow: hidden;
+        }
+
+        .resizable {
+            overflow: hidden;
+            resize: horizontal;
+            min-width: 260px;
+            max-width: 450px;
+            background: var(--surface);
+            border-radius: var(--radius-xl);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* SIDEBAR CHANNELS */
+        .sidebar-content {
+            flex: 1; padding: 16px 8px; overflow-y: auto;
+        }
+
+        .nav-category {
+            font-size: 11px; font-weight: 700; color: var(--outline);
+            text-transform: uppercase; letter-spacing: 1.5px;
+            margin: 16px 0 8px 12px;
+        }
+
+        .nav-item {
+            padding: 10px 16px; border-radius: var(--radius-pill);
+            margin-bottom: 2px; cursor: pointer; display: flex; align-items: center; gap: 12px;
+            color: var(--secondary);
+            font-size: 14px;
+        }
+
+        .nav-item.active { background: var(--primary-container); color: var(--pulse-accent); font-weight: 500; }
+        .nav-item:not(.active):hover { background: rgba(255,255,255,0.05); }
+
+        /* VOICE USER LIST */
+        .voice-user-list { margin-left: 32px; margin-top: 4px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+        .voice-user { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: var(--radius-pill); cursor: pointer; }
+        .voice-user:hover { background: rgba(255,255,255,0.03); }
+        .v-avatar { width: 24px; height: 24px; border-radius: 8px; background: var(--primary-container); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; position: relative; }
+        .v-avatar.speaking { box-shadow: 0 0 0 2px var(--success); }
+        .v-name { font-size: 13px; color: #E6E1E5; }
+
+        /* CHAT VIEW */
+        .chat-view {
+            flex: 1;
+            background: var(--surface-container);
+            border-radius: var(--radius-xl);
+            display: flex; flex-direction: column;
+            min-width: 300px;
+        }
+
+        .chat-header { padding: 18px 24px; font-weight: 500; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .message-list { flex: 1; padding: 20px; overflow-y: auto; }
+
+        /* USERS PANEL & COMMUNITY HEADER */
+        .users-sidebar {
+            width: 280px;
+            background: var(--surface-bright);
+            direction: rtl;
+        }
+        .users-content-wrapper {
+            direction: ltr;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .community-header {
+            position: relative;
+            min-height: 140px;
+            width: 100%;
+            background: linear-gradient(135deg, #4F378B 0%, #1D192B 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 16px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        /* Декоративный эффект для шапки */
+        .community-header::before {
+            content: "";
+            position: absolute;
+            top: -20%; right: -10%;
+            width: 150px; height: 150px;
+            background: var(--primary);
+            filter: blur(60px);
+            opacity: 0.2;
+            border-radius: 50%;
+        }
+
+        .community-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #FFFFFF;
+            margin-bottom: 4px;
+            z-index: 1;
+        }
+
+        .community-sub {
+            font-size: 12px;
+            color: var(--pulse-accent);
+            opacity: 0.8;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* USER ROWS IN PANEL */
+        .users-list { padding: 12px; }
+        .role-title { font-size: 11px; font-weight: 700; color: var(--outline); text-transform: uppercase; letter-spacing: 1.5px; margin: 16px 0 8px 8px; }
+        .user-row { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 16px; cursor: pointer; }
+        .user-row:hover { background: rgba(255,255,255,0.05); }
+        .u-avatar { width: 36px; height: 36px; border-radius: 12px; background: var(--primary-container); display: flex; align-items: center; justify-content: center; font-weight: 700; }
+        .u-name.admin { color: var(--role-admin); }
+
+        /* --- USER CONTROL PANEL --- */
+        .user-control-panel {
+            margin: 8px;
+            background: var(--surface-container);
+            border-radius: 24px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+
+        .voice-connection-card { background: rgba(0, 0, 0, 0.2); border-radius: 18px; padding: 12px; }
+        .voice-top { display: flex; justify-content: space-between; margin-bottom: 12px; }
+        .voice-info { display: flex; align-items: center; gap: 10px; }
+        .voice-status-msg { color: var(--success); font-size: 13px; font-weight: 600; }
+        .voice-channel-path { font-size: 11px; opacity: 0.5; display: block; }
+        .voice-media-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .media-tile { background: var(--surface-bright); border: none; border-radius: 12px; height: 38px; cursor: pointer; font-size: 16px; color: white; }
+        .media-tile:hover { background: var(--primary-container); }
+
+        .bottom-profile { display: flex; justify-content: space-between; align-items: center; padding: 8px; }
+        .profile-controls { display: flex; gap: 4px; }
+        .segmented-group { display: flex; background: var(--surface-bright); border-radius: 12px; overflow: hidden; }
+        .seg-btn { border: none; background: transparent; color: white; padding: 8px; cursor: pointer; }
+        .seg-btn.mute-active { color: var(--error); background: rgba(242, 184, 181, 0.1); }
+        .seg-btn-dropdown { border: none; background: transparent; color: white; border-left: 1px solid rgba(255,255,255,0.1); padding: 0 4px; cursor: pointer; font-size: 10px; }
+
+        /* INPUT AREA */
+        .input-area { padding: 20px; }
+        .input-pill {
+            background: var(--bg-base); height: 60px; border-radius: var(--radius-pill);
+            display: flex; align-items: center; padding: 0 20px; gap: 12px;
+        }
+        .input-pill input { flex: 1; background: transparent; border: none; outline: none; color: white; font-size: 16px; }
+
+        /* MOBILE */
+        @media (max-width: 768px) {
+            .sidebar, .users-sidebar { display: none; }
+            .main-layout { padding: 0; }
+            .chat-view { border-radius: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="top-bar">
+        <div class="server-list">
+            <div class="dm-home" title="Главная">✦</div>
+            <div style="width: 1px; height: 32px; background: var(--surface-bright); margin: 0 4px;"></div>
+            <div class="server-icon active">P</div>
+            <div class="server-icon">D</div>
+            <div class="server-icon" style="color: var(--outline); border: 2px dashed var(--outline); background: transparent;">+</div>
+        </div>
+
+        <div class="project-brand">
+            <svg class="pulse-icon" viewBox="0 0 24 24">
+                <path d="M3 12h3l3-9 4 18 3-9h5" />
+            </svg>
+            <span>Pulse</span>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        <aside class="sidebar resizable">
+            <div class="sidebar-content">
+                <div class="nav-category">Текстовые каналы</div>
+                <div class="nav-item active"><span>#</span> основной</div>
+                <div class="nav-item"><span>#</span> дизайн-код</div>
+                <div class="nav-item"><span>#</span> ресурсы</div>
+
+                <div class="nav-category">Голосовые каналы</div>
+                <div class="nav-item"><span>🔊</span> Game-Voice</div>
+                <div class="voice-user-list">
+                    <div class="voice-user">
+                        <div class="v-avatar speaking">P</div>
+                        <span class="v-name">Python4k</span>
+                    </div>
+                    <div class="voice-user">
+                        <div class="v-avatar" style="background: var(--surface-bright);">A</div>
+                        <span class="v-name">Alexander</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="user-control-panel">
+                <div class="voice-connection-card">
+                    <div class="voice-top">
+                        <div class="voice-info">
+                            <div style="color: var(--success); font-size: 20px;">🎧</div>
+                            <div>
+                                <span class="voice-status-msg">Голос подключен</span>
+                                <span class="voice-channel-path">Game-Voice / Pulse</span>
+                            </div>
+                        </div>
+                        <button style="background:transparent; border:none; color:var(--error); cursor:pointer; font-size:18px;">✖</button>
+                    </div>
+                    <div class="voice-media-grid">
+                        <button class="media-tile">📹</button>
+                        <button class="media-tile">🖥️</button>
+                        <button class="media-tile">🎮</button>
+                        <button class="media-tile">🎉</button>
+                    </div>
+                </div>
+
+                <div class="bottom-profile">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="u-avatar" style="width:32px; height:32px; font-size:12px;">P</div>
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-size: 13px; font-weight: 700;">Python4k</span>
+                            <span style="font-size: 10px; color: var(--primary);">💜 NUR...</span>
+                        </div>
+                    </div>
+                    <div class="profile-controls">
+                        <div class="segmented-group">
+                            <button class="seg-btn mute-active">🎙️</button>
+                            <button class="seg-btn-dropdown">⌵</button>
+                        </div>
+                        <div class="segmented-group">
+                            <button class="seg-btn">🎧</button>
+                            <button class="seg-btn-dropdown">⌵</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="chat-view">
+            <div class="chat-header"># основной</div>
+            <div class="message-list">
+                <div style="display: flex; gap: 16px; margin-bottom: 24px;">
+                    <div class="u-avatar">G</div>
+                    <div>
+                        <div style="color: var(--primary); font-weight: 700;">Pulse Bot <span style="font-size: 10px; background: var(--primary-container); padding: 2px 6px; border-radius: 4px; margin-left: 4px; color: white;">СИСТЕМА</span></div>
+                        <div style="margin-top: 4px; opacity: 0.9; line-height: 1.5;">Шапка сообщества добавлена! Теперь правая панель выглядит более официально и стильно.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="input-area">
+                <div class="input-pill">
+                    <span style="opacity: 0.5;">⊕</span>
+                    <input type="text" placeholder="Написать в #основной">
+                    <span style="opacity: 0.5;">😊</span>
+                </div>
+            </div>
+        </main>
+
+        <aside class="users-sidebar resizable">
+            <div class="users-content-wrapper">
+                <div class="community-header">
+                    <div class="community-title">Pulse Community</div>
+                    <div class="community-sub">
+                        <span>● 1,240 Участников</span>
+                        <span style="margin-left: 8px; color: var(--success);">● 450 В сети</span>
+                    </div>
+                </div>
+
+                <div class="users-list">
+                    <div class="role-title">Администрация — 1</div>
+                    <div class="user-row">
+                        <div class="u-avatar" style="border: 2px solid var(--role-admin);">A</div>
+                        <span class="u-name admin">Alexander</span>
+                    </div>
+
+                    <div class="role-title">В сети — 2</div>
+                    <div class="user-row">
+                        <div class="u-avatar">K</div>
+                        <span class="u-name">Kristina</span>
+                    </div>
+                    <div class="user-row">
+                        <div class="u-avatar">D</div>
+                        <span class="u-name">Dmitry</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+</body>
+</html>
