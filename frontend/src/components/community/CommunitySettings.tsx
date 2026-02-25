@@ -93,12 +93,26 @@ export function CommunitySettings({ communityId }: Props) {
 
   if (!community) return null;
 
+  const handleSearchClick = () => {
+    // Dispatch keyboard shortcut for search (Ctrl+K)
+    const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true });
+    window.dispatchEvent(event);
+  };
+
   return (
     <div className={styles.header}>
-      <span className={styles.name}>{community.name}</span>
-      <button className={styles.menuBtn} onClick={() => setShowMenu(!showMenu)}>
+      <div className={styles.headerLeft}>
+        <span className={styles.name}>{community.name}</span>
+        <button className={styles.menuBtn} onClick={() => setShowMenu(!showMenu)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6,9 12,15 18,9"/>
+          </svg>
+        </button>
+      </div>
+      <button className={styles.searchBtn} onClick={handleSearchClick} title="Search (Ctrl+K)">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6,9 12,15 18,9"/>
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
       </button>
 

@@ -67,20 +67,37 @@ export function DMList({ onSelectChannel, activeChannelId }: Props) {
     }
   }, [recipientUsername, createDM, onSelectChannel]);
 
+  const handleSearchClick = () => {
+    const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true });
+    window.dispatchEvent(event);
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
         <span className={styles.title}>Direct Messages</span>
-        <button
-          className={styles.newBtn}
-          onClick={() => setShowNewDM(!showNewDM)}
-          title="New DM"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            className={styles.actionBtn}
+            onClick={handleSearchClick}
+            title="Search (Ctrl+K)"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </button>
+          <button
+            className={styles.actionBtn}
+            onClick={() => setShowNewDM(!showNewDM)}
+            title="New DM"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {showNewDM && (

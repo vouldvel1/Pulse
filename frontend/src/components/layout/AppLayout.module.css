@@ -148,6 +148,12 @@
   overflow: hidden;
 }
 
+.voicePanelContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Floating chat panel */
 .screenSharePanel {
   flex: 1;

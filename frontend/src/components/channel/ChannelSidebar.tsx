@@ -61,7 +61,13 @@ export function ChannelSidebar() {
   const handleSelectChannel = (channel: Channel) => {
     if (channel.type === 'category') return;
     if (channel.type === 'voice') {
-      // Join voice channel instead of opening text chat
+      // If already connected to this voice channel, switch to VoiceChannelView
+      if (voiceChannelId === channel.id) {
+        // Trigger showing VoiceChannelView in AppLayout
+        window.dispatchEvent(new CustomEvent('pulse:showVoicePanel'));
+        return;
+      }
+      // Join voice channel
       joinVoice(channel.id).catch(() => {
         // Error is already set in voiceStore.error
       });

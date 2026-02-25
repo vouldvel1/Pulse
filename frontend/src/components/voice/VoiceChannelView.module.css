@@ -56,6 +56,24 @@
   gap: var(--sp-2);
 }
 
+.headerBtn {
+  background: none;
+  border: none;
+  color: var(--text-2);
+  padding: 6px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--t-fast);
+}
+
+.headerBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
 .connectingBadge {
   font-size: var(--font-size-xs);
   color: var(--yellow);

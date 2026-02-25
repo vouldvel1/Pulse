@@ -10,9 +10,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  padding: 0 0.75rem;
+  height: 48px;
   border-bottom: 1px solid var(--border);
-  min-height: 48px;
+  flex-shrink: 0;
 }
 
 .title {
@@ -23,17 +24,24 @@
   color: var(--text-muted);
 }
 
-.newBtn {
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.actionBtn {
   background: none;
   color: var(--text-muted);
-  padding: 0.25rem;
+  padding: 0.375rem;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
+  justify-content: center;
   transition: color 0.15s, background-color 0.15s;
 }
 
-.newBtn:hover {
+.actionBtn:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
 }

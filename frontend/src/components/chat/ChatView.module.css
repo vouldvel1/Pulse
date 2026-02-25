@@ -101,6 +101,9 @@
   border-radius: var(--r-md);
   transition: background-color var(--t-fast), color var(--t-fast);
   color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .headerBtn:hover { background: var(--bg-hover); color: var(--text-1); }

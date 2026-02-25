@@ -11,12 +11,16 @@ const QUALITY_OPTIONS: { value: ScreenShareQuality; label: string }[] = [
   { value: '1440p60', label: '1440p 60fps' },
 ];
 
+interface VoiceChannelViewProps {
+  onShowChat?: () => void;
+}
+
 /**
  * VoiceChannelView is a full-panel view shown in the main content area
  * when the user is connected to a voice channel. Inspired by Discord's
  * voice channel UI with participant grid, screen share tile, and bottom toolbar.
  */
-export function VoiceChannelView() {
+export function VoiceChannelView({ onShowChat }: VoiceChannelViewProps) {
   const {
     currentChannelId,
     isConnected,
@@ -66,6 +70,17 @@ export function VoiceChannelView() {
           <span className={styles.headerParticipants}>{participants.length} participant{participants.length !== 1 ? 's' : ''}</span>
         </div>
         <div className={styles.headerRight}>
+          {onShowChat && (
+            <button
+              className={styles.headerBtn}
+              onClick={onShowChat}
+              title="Show Chat"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </button>
+          )}
           {isConnected && pingMs >= 0 && (
             <span className={`${styles.pingBadge} ${pingMs < 80 ? styles.pingGood : pingMs < 150 ? styles.pingWarn : styles.pingBad}`}>
               {pingMs}ms

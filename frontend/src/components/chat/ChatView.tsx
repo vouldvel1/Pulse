@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useMessageStore } from '../../stores/messageStore';
 import { useChannelStore } from '../../stores/channelStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useVoiceStore } from '../../stores/voiceStore';
 import { wsClient } from '../../utils/websocket';
 import { MessageItem } from './MessageItem';
 import { MessageInput } from './MessageInput';
@@ -9,11 +10,16 @@ import { PinnedMessagesPanel } from './PinnedMessagesPanel';
 import type { Message } from '../../types';
 import styles from './ChatView.module.css';
 
-export function ChatView() {
+interface ChatViewProps {
+  onShowVoicePanel?: () => void;
+}
+
+export function ChatView({ onShowVoicePanel }: ChatViewProps) {
   const { messages, hasMore, isLoading, error, fetchMessages, clearError } = useMessageStore();
   const { handleNewMessage, handleMessageEdit, handleMessageDelete, handleReaction, handleReactionRemove } = useMessageStore();
   const { activeChannelId, channels } = useChannelStore();
   const { user } = useAuthStore();
+  const voiceConnected = useVoiceStore((s) => s.isConnected);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const prevMessageCount = useRef(0);
@@ -113,6 +119,20 @@ export function ChatView() {
           </>
         )}
         <div className={styles.headerSpacer} />
+        {voiceConnected && onShowVoicePanel && (
+          <button
+            className={styles.headerBtn}
+            onClick={onShowVoicePanel}
+            title="Show Voice Panel"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          </button>
+        )}
         <button
           className={`${styles.headerBtn} ${showPinned ? styles.headerBtnActive : ''}`}
           onClick={() => setShowPinned((v) => !v)}

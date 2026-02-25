@@ -39,14 +39,15 @@ import styles from './AppLayout.module.css';
 export function AppLayout() {
   const { user, fetchMe } = useAuthStore();
   const activeCommunityId = useCommunityStore((s) => s.activeCommunityId);
+  const activeChannelId = useChannelStore((s) => s.activeChannelId);
   const screenShareViewers = useVoiceStore((s) => s.screenShareViewers);
   const voiceConnected = useVoiceStore((s) => s.isConnected);
   const voiceConnecting = useVoiceStore((s) => s.isConnecting);
-  const activeChannelId = useChannelStore((s) => s.activeChannelId);
   const hasScreenShare = Object.keys(screenShareViewers).length > 0;
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showVoicePanel, setShowVoicePanel] = useState(false);
   const cleanupVoice = useVoiceStore((s) => s.cleanup);
 
   // Activate WebRTC at the layout level so it stays active regardless of which view is shown
@@ -193,6 +194,15 @@ export function AppLayout() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Listen for voice panel toggle from sidebar
+  useEffect(() => {
+    const handler = () => {
+      setShowVoicePanel(true);
+    };
+    window.addEventListener('pulse:showVoicePanel', handler);
+    return () => window.removeEventListener('pulse:showVoicePanel', handler);
+  }, []);
+
   const getInitials = (name: string): string => {
     return name
       .split(' ')
@@ -310,8 +320,21 @@ export function AppLayout() {
               </p>
             </div>
           )
-        ) : (voiceConnected || voiceConnecting) && !activeChannelId ? (
-          <VoiceChannelView />
+        ) : voiceConnected || voiceConnecting ? (
+          <>
+            {hasScreenShare && (
+              <div className={styles.screenSharePanel}>
+                <ScreenShareViewer />
+              </div>
+            )}
+            {activeChannelId && !showVoicePanel ? (
+              <div className={hasScreenShare ? styles.chatPanelCompact : styles.chatPanel}>
+                <ChatView onShowVoicePanel={() => setShowVoicePanel(true)} />
+              </div>
+            ) : (
+              <VoiceChannelView onShowChat={() => setShowVoicePanel(false)} />
+            )}
+          </>
         ) : (
           <>
             {hasScreenShare && (
