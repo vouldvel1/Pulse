@@ -27,19 +27,16 @@ This scales better than full mesh (P2P with every participant) since each client
 
 1. Client calls `POST /api/voice/channels/{id}/join`
 2. Server creates a voice state in PostgreSQL and adds user to in-memory room
-3. Server returns an SFU SDP offer and participant list
-4. Client creates a PeerConnection, sets the remote offer, sends an answer via `POST /api/voice/sfu/answer`
-5. ICE candidates exchanged via `POST /api/voice/sfu/candidate` and `ice_candidate` WS events
-6. Audio starts flowing through the SFU
+3. Server returns a LiveKit access token and participant list
+4. Client connects to LiveKit using the token and WebRTC SDK
+5. Audio flows through LiveKit's SFU
 
 ### SFU Implementation
 
-Located in `backend/internal/signaling/sfu.go`:
-
-- Uses Pion WebRTC v4's `webrtc.API` with a `MediaEngine` configured for Opus audio
-- Each room maintains a list of `PeerConnection`s
-- When a new track is received from a participant, it is forwarded to all other participants' downstream connections
-- Track relay uses `OnTrack` callbacks to pipe RTP packets
+Uses LiveKit for the Selective Forwarding Unit:
+- Server generates LiveKit access tokens via the `POST /api/voice/channels/{id}/join` endpoint
+- Client connects directly to LiveKit server (not through Pulse backend)
+- Voice state is tracked in PostgreSQL and synchronized via WebSocket events
 
 ### ICE Servers
 

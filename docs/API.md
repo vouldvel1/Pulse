@@ -63,6 +63,97 @@ Returns the authenticated user's profile.
 
 ---
 
+## Users
+
+### GET /api/users/search?q=username (auth required)
+
+Search for users by username.
+
+**Query params:**
+- `q` (required) — Search query (minimum 1 character)
+- `limit` (1-50, default 20)
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "uuid",
+    "username": "johndoe",
+    "display_name": "John Doe",
+    "avatar_url": "https://...",
+    "bio": "Hello world"
+  }
+]
+```
+
+### PATCH /api/users/me (auth required)
+
+Update your profile.
+
+**Body:**
+```json
+{
+  "display_name": "John Doe",
+  "bio": "Hello world",
+  "custom_status": "Working on something",
+  "username": "johndoe",
+  "email": "john@example.com"
+}
+```
+
+**Response:** `200 OK` — Returns updated user object.
+
+### POST /api/users/me/avatar (auth required)
+
+Upload a new avatar image.
+
+**Form fields:**
+- `file` — Image file (max 8MB, JPEG/PNG/GIF/WebP)
+
+**Response:** `200 OK` — Returns updated user object.
+
+### POST /api/users/me/banner (auth required)
+
+Upload a new banner image.
+
+**Form fields:**
+- `file` — Image file (max 8MB, JPEG/PNG/GIF/WebP)
+
+**Response:** `200 OK` — Returns updated user object.
+
+### PUT /api/users/me/password (auth required)
+
+Change your password.
+
+**Body:**
+```json
+{
+  "current_password": "OldPass123!",
+  "new_password": "NewPass123!"
+}
+```
+
+**Response:** `200 OK`
+```json
+{ "message": "password changed" }
+```
+
+### DELETE /api/users/me (auth required)
+
+Delete your account.
+
+**Body:**
+```json
+{ "password": "MyPassword123!" }
+```
+
+**Response:** `200 OK`
+```json
+{ "message": "account deleted" }
+```
+
+---
+
 ## Communities
 
 ### POST /api/communities
@@ -80,6 +171,14 @@ Create a new community. Creator becomes owner.
 ### GET /api/communities
 
 List communities the authenticated user belongs to.
+
+### GET /api/communities/search?q=name (auth required)
+
+Search for public communities.
+
+**Query params:**
+- `q` (required) — Search query
+- `limit` (1-50, default 20)
 
 ### GET /api/communities/{id}
 
@@ -108,6 +207,12 @@ List community members with user info and roles.
 ### DELETE /api/communities/{id}/members/me
 
 Leave a community (cannot leave if owner).
+
+### POST /api/communities/{id}/join (auth required)
+
+Join a public community.
+
+**Response:** `200 OK`
 
 ---
 
@@ -448,13 +553,19 @@ Full-text search across messages in communities you belong to.
 
 ## Voice
 
-### GET /api/voice/turn-credentials
-
-Get TURN/STUN server credentials for WebRTC.
-
 ### POST /api/voice/channels/{id}/join
 
-Join a voice channel. Returns participant list and SFU offer.
+Join a voice channel. Returns participant list and LiveKit token.
+
+**Response:**
+```json
+{
+  "channel_id": "uuid",
+  "participants": [...],
+  "token": "livekit-token",
+  "livekit_url": "wss://..."
+}
+```
 
 ### POST /api/voice/leave
 
@@ -472,18 +583,6 @@ Update voice state (mute/deaf).
 ### GET /api/voice/channels/{id}/participants
 
 List participants in a voice channel.
-
-### POST /api/voice/sfu/offer
-
-Send SDP offer to the SFU.
-
-### POST /api/voice/sfu/answer
-
-Send SDP answer to the SFU.
-
-### POST /api/voice/sfu/candidate
-
-Send ICE candidate to the SFU.
 
 ---
 
