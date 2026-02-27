@@ -1,3 +1,16 @@
+# ─── Stage 0: Dev (hot-reload via volume mount) ───────────────────────────────
+FROM node:22-alpine AS dev
+
+WORKDIR /app
+
+# Install dependencies only; source is mounted at runtime via docker-compose volume
+COPY package.json package-lock.json ./
+RUN npm ci
+
+EXPOSE 5173
+
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
 # ─── Stage 1: Build ──────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
 

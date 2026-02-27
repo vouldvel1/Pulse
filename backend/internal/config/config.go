@@ -32,10 +32,11 @@ type Config struct {
 	RateLimitBurst int
 
 	// LiveKit (WebRTC media server)
-	LiveKitAPIKey    string
-	LiveKitAPISecret string
-	LiveKitURL       string // Internal URL for Go SDK RoomServiceClient (ws://livekit:7880)
-	LiveKitWSURL     string // Browser-facing URL returned to frontend (ws://127.0.0.1:7880)
+	LiveKitAPIKey     string
+	LiveKitAPISecret  string
+	LiveKitURL        string // Internal URL for Go SDK RoomServiceClient (ws://livekit:7880)
+	LiveKitWSURL      string // Browser-facing URL returned to frontend (ws://127.0.0.1:7880)
+	LiveKitTURNSecret string // Shared secret for generating ephemeral TURN credentials
 }
 
 type PostgresConfig struct {
@@ -137,14 +138,15 @@ func Load() (*Config, error) {
 			AccessExpiry:  accessExpiry,
 			RefreshExpiry: refreshExpiry,
 		},
-		BcryptCost:       bcryptCost,
-		MaxUploadSize:    maxUpload,
-		RateLimitRPS:     rps,
-		RateLimitBurst:   burst,
-		LiveKitAPIKey:    getEnv("LIVEKIT_API_KEY", "devkey"),
-		LiveKitAPISecret: getEnv("LIVEKIT_API_SECRET", ""),
-		LiveKitURL:       getEnv("LIVEKIT_URL", "ws://livekit:7880"),
-		LiveKitWSURL:     getEnv("LIVEKIT_WS_URL", "ws://127.0.0.1:7880"),
+		BcryptCost:        bcryptCost,
+		MaxUploadSize:     maxUpload,
+		RateLimitRPS:      rps,
+		RateLimitBurst:    burst,
+		LiveKitAPIKey:     getEnv("LIVEKIT_API_KEY", "devkey"),
+		LiveKitAPISecret:  getEnv("LIVEKIT_API_SECRET", ""),
+		LiveKitURL:        getEnv("LIVEKIT_URL", "ws://livekit:7880"),
+		LiveKitWSURL:      getEnv("LIVEKIT_WS_URL", "ws://127.0.0.1:7880"),
+		LiveKitTURNSecret: getEnv("LIVEKIT_TURN_SECRET", ""),
 	}, nil
 }
 

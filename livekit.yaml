@@ -1,11 +1,20 @@
 port: 7880
 rtc:
-  port_range_start: 50000
-  port_range_end: 60000
-  use_external_ip: false
-  node_ip: 192.168.10.90
   tcp_port: 7881
+  udp_port: 7882
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: false
+turn:
+  enabled: true
+  # TURN over TLS shares the LiveKit TCP port (7881) — no extra port needed
+  tls_port: 7881
+  # UDP TURN on a dedicated port
+  udp_port: 3478
+  # Secret used to generate ephemeral TURN credentials (included in LiveKit JWT)
+  # MUST match LIVEKIT_TURN_SECRET in .env
+  secret: change_me_livekit_turn_secret
 keys:
-  devkey: secret1234567890secret1234567890se
+  devkey: change_me_livekit_secret_at_least_32_chars_long
 logging:
   level: info

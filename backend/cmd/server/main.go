@@ -127,6 +127,12 @@ func main() {
 		cfg.LiveKitAPIKey, cfg.LiveKitAPISecret, cfg.LiveKitWSURL,
 	)
 
+	// ICE server handler — serves ephemeral TURN credentials for WebRTC
+	// turnHost is the publicly reachable host:port of the LiveKit TURN server.
+	// In production, replace with your server's public IP or domain.
+	turnHost := cfg.Domain + ":3478"
+	iceHandler := api.NewICEHandler(turnHost, "7881", cfg.LiveKitTURNSecret)
+
 	// Setup router
 	mux := http.NewServeMux()
 
@@ -229,13 +235,14 @@ func main() {
 	mux.Handle("DELETE /api/notifications/{id}", authMW.Middleware(http.HandlerFunc(notificationHandler.Delete)))
 
 	// Voice routes (auth required)
-
-	// Search routes (auth required)
-	mux.Handle("GET /api/search", authMW.Middleware(http.HandlerFunc(searchHandler.Search)))
 	mux.Handle("POST /api/voice/channels/{id}/join", authMW.Middleware(http.HandlerFunc(voiceHandler.JoinVoice)))
 	mux.Handle("POST /api/voice/leave", authMW.Middleware(http.HandlerFunc(voiceHandler.LeaveVoice)))
 	mux.Handle("PATCH /api/voice/state", authMW.Middleware(http.HandlerFunc(voiceHandler.UpdateVoiceState)))
 	mux.Handle("GET /api/voice/channels/{id}/participants", authMW.Middleware(http.HandlerFunc(voiceHandler.GetVoiceParticipants)))
+	mux.Handle("GET /api/voice/ice-servers", authMW.Middleware(http.HandlerFunc(iceHandler.GetICEServers)))
+
+	// Search routes (auth required)
+	mux.Handle("GET /api/search", authMW.Middleware(http.HandlerFunc(searchHandler.Search)))
 
 	// Apply global middleware
 	var handler http.Handler = mux

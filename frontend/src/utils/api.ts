@@ -346,6 +346,12 @@ export const roles = {
 
 // ─── Voice ────────────────────────────────────────────────────────────────────
 
+export interface ICEServer {
+  urls: string[];
+  username?: string;
+  credential?: string;
+}
+
 export const voice = {
   join: (channelId: string) =>
     request<{ token: string; livekit_url: string; participants: VoiceParticipant[] }>(
@@ -360,6 +366,10 @@ export const voice = {
 
   participants: (channelId: string) =>
     request<VoiceParticipant[]>(`/voice/channels/${channelId}/participants`),
+
+  /** Returns ephemeral ICE servers (STUN + TURN) from the backend. */
+  iceServers: () =>
+    request<{ ice_servers: ICEServer[] }>('/voice/ice-servers').then((r) => r.ice_servers),
 };
 
 // ─── Search ───────────────────────────────────────────────────────────────────

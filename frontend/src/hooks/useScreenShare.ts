@@ -21,6 +21,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { wsClient } from '@/utils/wsClient';
 import { useVoiceStore } from '@/stores/voiceStore';
+import { voice as voiceApi, type ICEServer } from '@/utils/api';
 
 export type ScreenShareQuality = '480p30' | '720p60' | '1080p60' | '1440p60';
 
@@ -68,11 +69,24 @@ export function useScreenShare() {
 
   const localStreamRef = useRef<MediaStream | null>(null);
 
-  // ── Helper: create a base PeerConnection with STUN ───────────────────────
-  const createPC = (): RTCPeerConnection =>
-    new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-    });
+  // Cached ICE servers fetched from the backend (STUN + TURN)
+  const iceServersRef = useRef<ICEServer[]>([]);
+
+  // ── Fetch ICE servers once on mount ──────────────────────────────────────
+  useEffect(() => {
+    voiceApi.iceServers()
+      .then((servers) => { iceServersRef.current = servers; })
+      .catch(() => { /* fall back to browser defaults if fetch fails */ });
+  }, []);
+
+  // ── Helper: create a PeerConnection with STUN/TURN from backend ──────────
+  const createPC = useCallback((): RTCPeerConnection => {
+    const iceServers: RTCIceServer[] =
+      iceServersRef.current.length > 0
+        ? iceServersRef.current
+        : [{ urls: 'stun:stun.l.google.com:19302' }]; // fallback only
+    return new RTCPeerConnection({ iceServers, iceTransportPolicy: 'all' });
+  }, []);
 
   // ── STOP sharing ──────────────────────────────────────────────────────────
   const stopSharing = useCallback(() => {

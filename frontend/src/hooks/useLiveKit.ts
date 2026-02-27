@@ -22,9 +22,11 @@ import {
   type LocalParticipant,
 } from 'livekit-client';
 import { useVoiceStore } from '@/stores/voiceStore';
+import { voice as voiceApi, type ICEServer } from '@/utils/api';
 
 export function useLiveKit() {
   const roomRef = useRef<Room | null>(null);
+  const iceServersRef = useRef<ICEServer[]>([]);
 
   const channelId = useVoiceStore((s) => s.channelId);
   const livekitToken = useVoiceStore((s) => s.livekitToken);
@@ -34,6 +36,13 @@ export function useLiveKit() {
   const setSpeaking = useVoiceStore((s) => s.setSpeaking);
   const setAudioElement = useVoiceStore((s) => s.setAudioElement);
   const removeAudioElement = useVoiceStore((s) => s.removeAudioElement);
+
+  // ── Fetch ICE servers once on mount ────────────────────────────────────────
+  useEffect(() => {
+    voiceApi.iceServers()
+      .then((servers) => { iceServersRef.current = servers; })
+      .catch(() => { /* fall back to LiveKit's embedded ICE servers */ });
+  }, []);
 
   // ── Connect to LiveKit when channelId + token become available ─────────────
   useEffect(() => {
@@ -127,7 +136,15 @@ export function useLiveKit() {
 
     const connect = async () => {
       try {
-        await room.connect(livekitUrl, livekitToken);
+        // Pass rtcConfig via connect options so LiveKit uses our TURN server.
+        // iceServersRef may still be empty if the fetch hasn't resolved yet;
+        // in that case LiveKit falls back to its own embedded ICE config.
+        const rtcConfig: RTCConfiguration | undefined =
+          iceServersRef.current.length > 0
+            ? { iceServers: iceServersRef.current, iceTransportPolicy: 'all' }
+            : undefined;
+
+        await room.connect(livekitUrl, livekitToken, { rtcConfig });
         // After await: check if effect was cleaned up while connecting
         if (cancelled) {
           void room.disconnect();
