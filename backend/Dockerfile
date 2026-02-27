@@ -16,6 +16,31 @@ COPY . .
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /pulse-server ./cmd/server
 
+# ---------------------------------------------------------------------------
+# Development stage (hot reload)
+# ---------------------------------------------------------------------------
+FROM golang:1.24-alpine AS dev
+
+WORKDIR /app
+
+# Install development dependencies
+RUN apk add --no-cache gcc musl-dev air
+
+# Copy go module files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Install air for hot reload
+RUN go install github.com/air-verse/air@latest
+
+# Copy source code
+COPY . .
+
+EXPOSE 8080
+
+# Run with air for hot reload
+CMD ["air", "-c", ".air.toml"]
+
 # Runtime stage
 FROM alpine:3.19 AS runtime
 
