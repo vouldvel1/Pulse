@@ -46,16 +46,9 @@ export function LeftSidebar({ onOpenSettings }: LeftSidebarProps) {
             size={32}
             radius={10}
           />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {user?.display_name ?? user?.username ?? '...'}
-            </div>
-            {user?.custom_status && (
-              <div style={{ fontSize: 10, color: 'var(--outline)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {user.custom_status}
-              </div>
-            )}
-          </div>
+          <span style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {user?.display_name ?? user?.username ?? '...'}
+          </span>
         </div>
         <button
           onClick={onOpenSettings}

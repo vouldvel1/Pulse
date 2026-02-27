@@ -1,4 +1,5 @@
 import { useVoiceStore } from '@/stores/voiceStore';
+import { screenShareActions } from '@/hooks/useScreenShare';
 
 export function VoiceMiniPanel() {
   const channelId = useVoiceStore((s) => s.channelId);
@@ -6,12 +7,22 @@ export function VoiceMiniPanel() {
   const communityName = useVoiceStore((s) => s.communityName);
   const selfMute = useVoiceStore((s) => s.selfMute);
   const selfDeaf = useVoiceStore((s) => s.selfDeaf);
+  const isSharing = useVoiceStore((s) => s.isSharing);
   const leaveChannel = useVoiceStore((s) => s.leaveChannel);
   const toggleMute = useVoiceStore((s) => s.toggleMute);
   const toggleDeaf = useVoiceStore((s) => s.toggleDeaf);
   const setOverlay = useVoiceStore((s) => s.setOverlay);
 
   if (!channelId) return null;
+
+  const handleScreenShare = () => {
+    if (isSharing) {
+      screenShareActions.stopSharing();
+    } else {
+      // Mini panel: start with default quality (720p60)
+      void screenShareActions.startSharing('720p60');
+    }
+  };
 
   return (
     <div
@@ -75,16 +86,22 @@ export function VoiceMiniPanel() {
       {/* Controls */}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
         <VBtn
-          icon={selfDeaf ? 'headset_off' : 'headset'}
-          title={selfDeaf ? 'Отключить заглушение' : 'Заглушить звук'}
-          active={selfDeaf}
-          onClick={toggleDeaf}
+          icon={isSharing ? 'stop_screen_share' : 'screen_share'}
+          title={isSharing ? 'Остановить трансляцию' : 'Поделиться экраном'}
+          active={isSharing}
+          onClick={handleScreenShare}
         />
         <VBtn
           icon={selfMute ? 'mic_off' : 'mic'}
           title={selfMute ? 'Включить микрофон' : 'Выключить микрофон'}
           active={selfMute}
           onClick={toggleMute}
+        />
+        <VBtn
+          icon={selfDeaf ? 'headset_off' : 'headset'}
+          title={selfDeaf ? 'Включить звук' : 'Заглушить всё'}
+          active={selfDeaf}
+          onClick={toggleDeaf}
         />
         <VBtn
           icon="call_end"

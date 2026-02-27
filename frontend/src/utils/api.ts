@@ -174,6 +174,9 @@ export const communities = {
 
   join: (id: string) => request<void>(`/communities/${id}/join`, { method: 'POST' }),
 
+  // Join a public community and return the Community object (backend returns it on success)
+  joinAndGet: (id: string) => request<Community>(`/communities/${id}/join`, { method: 'POST' }),
+
   leave: (id: string) => request<void>(`/communities/${id}/members/me`, { method: 'DELETE' }),
 };
 

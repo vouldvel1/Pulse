@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useDMStore } from '@/stores/dmStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useUIStore } from '@/stores/uiStore';
 import { Avatar } from '@/components/common/Avatar';
 import type { DMChannel } from '@/types';
 
@@ -10,6 +11,7 @@ export function DMSidebar() {
   const fetchChannels = useDMStore((s) => s.fetchChannels);
   const setActiveChannel = useDMStore((s) => s.setActiveChannel);
   const currentUser = useAuthStore((s) => s.user);
+  const setShowFindUserModal = useUIStore((s) => s.setShowFindUserModal);
 
   useEffect(() => {
     void fetchChannels();
@@ -29,6 +31,27 @@ export function DMSidebar() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Add friend button — accent style */}
+      <div
+        onClick={() => setShowFindUserModal(true)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '10px 16px',
+          borderRadius: 16,
+          cursor: 'pointer',
+          fontSize: 14,
+          fontWeight: 700,
+          background: 'var(--primary)',
+          color: 'var(--on-primary)',
+          margin: '2px 8px 12px',
+        }}
+      >
+        <span className="icon" style={{ fontSize: 18 }}>person_add</span>
+        Добавить друга
+      </div>
+
       {/* Section header */}
       <div
         style={{

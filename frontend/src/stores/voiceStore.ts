@@ -14,6 +14,15 @@ interface VoiceState {
   livekitUrl: string | null;
   showOverlay: boolean;
 
+  // Per-participant local volume (0–1)
+  participantVolumes: Record<string, number>;
+  // HTMLAudioElement map for volume/deaf control (keyed by userId)
+  audioElements: Map<string, HTMLAudioElement>;
+
+  // Screen sharing state
+  isSharing: boolean;
+  shareStream: MediaStream | null;
+
   joinChannel: (channelId: string, channelName: string, communityName: string) => Promise<void>;
   leaveChannel: () => Promise<void>;
   toggleMute: () => void;
@@ -23,6 +32,13 @@ interface VoiceState {
   removeParticipant: (userId: string) => void;
   updateParticipant: (userId: string, updates: Partial<VoiceParticipant>) => void;
   setSpeaking: (userId: string, speaking: boolean) => void;
+
+  setParticipantVolume: (userId: string, volume: number) => void;
+  setAudioElement: (userId: string, el: HTMLAudioElement) => void;
+  removeAudioElement: (userId: string) => void;
+
+  setIsSharing: (val: boolean) => void;
+  setShareStream: (stream: MediaStream | null) => void;
 }
 
 export const useVoiceStore = create<VoiceState>((set, get) => ({
@@ -35,6 +51,12 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   livekitToken: null,
   livekitUrl: null,
   showOverlay: false,
+
+  participantVolumes: {},
+  audioElements: new Map(),
+
+  isSharing: false,
+  shareStream: null,
 
   joinChannel: async (channelId, channelName, communityName) => {
     try {
@@ -56,6 +78,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   },
 
   leaveChannel: async () => {
+    // Stop any ongoing screen share
+    const { shareStream, audioElements } = get();
+    if (shareStream) {
+      shareStream.getTracks().forEach((t) => t.stop());
+    }
+    audioElements.forEach((el) => {
+      el.pause();
+      el.srcObject = null;
+    });
     try {
       await voiceApi.leave();
     } catch { /* ignore */ }
@@ -68,6 +99,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       livekitToken: null,
       livekitUrl: null,
       showOverlay: false,
+      isSharing: false,
+      shareStream: null,
+      audioElements: new Map(),
     });
   },
 
@@ -80,10 +114,16 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   },
 
   toggleDeaf: () => {
-    const { selfMute, selfDeaf } = get();
+    const { selfMute, selfDeaf, audioElements } = get();
     const newDeaf = !selfDeaf;
     void voiceApi.updateState(selfMute, newDeaf);
     wsClient.send('voice_state', { self_mute: selfMute, self_deaf: newDeaf });
+    // Apply immediately to all audio elements
+    audioElements.forEach((el, userId) => {
+      const vol = get().participantVolumes[userId] ?? 1;
+      el.volume = newDeaf ? 0 : vol;
+      el.muted = newDeaf;
+    });
     set({ selfDeaf: newDeaf });
   },
 
@@ -111,4 +151,38 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         p.user_id === userId ? { ...p, is_speaking: speaking } : p,
       ),
     })),
+
+  setParticipantVolume: (userId, volume) => {
+    const { audioElements, selfDeaf } = get();
+    const el = audioElements.get(userId);
+    if (el) {
+      el.volume = selfDeaf ? 0 : volume;
+    }
+    set((s) => ({
+      participantVolumes: { ...s.participantVolumes, [userId]: volume },
+    }));
+  },
+
+  setAudioElement: (userId, el) => {
+    const { participantVolumes, selfDeaf } = get();
+    const vol = participantVolumes[userId] ?? 1;
+    el.volume = selfDeaf ? 0 : vol;
+    el.muted = selfDeaf;
+    set((s) => {
+      const newMap = new Map(s.audioElements);
+      newMap.set(userId, el);
+      return { audioElements: newMap };
+    });
+  },
+
+  removeAudioElement: (userId) => {
+    set((s) => {
+      const newMap = new Map(s.audioElements);
+      newMap.delete(userId);
+      return { audioElements: newMap };
+    });
+  },
+
+  setIsSharing: (val) => set({ isSharing: val }),
+  setShareStream: (stream) => set({ shareStream: stream }),
 }));

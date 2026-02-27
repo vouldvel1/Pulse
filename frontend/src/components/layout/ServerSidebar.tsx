@@ -1,8 +1,10 @@
+import { useState, useEffect } from 'react';
 import { useCommunityStore } from '@/stores/communityStore';
 import { useMessageStore } from '@/stores/messageStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useVoiceStore } from '@/stores/voiceStore';
 import { wsClient } from '@/utils/wsClient';
+import { invites as invitesApi } from '@/utils/api';
 import type { Channel } from '@/types';
 
 export function ServerSidebar() {
@@ -15,11 +17,39 @@ export function ServerSidebar() {
   const setShowCreateCommunityModal = useUIStore((s) => s.setShowCreateCommunityModal);
   const setShowCreateChannelModal = useUIStore((s) => s.setShowCreateChannelModal);
 
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+
   const activeCommunity = communities.find((c) => c.id === activeCommunityId) ?? null;
   const communityChannels = activeCommunityId ? (channels[activeCommunityId] ?? []) : [];
 
   const textChannels = communityChannels.filter((c) => c.type === 'text' || c.type === 'announcement');
   const voiceChannels = communityChannels.filter((c) => c.type === 'voice');
+
+  // Reset invite panel when community changes
+  useEffect(() => {
+    setInviteCode(null);
+    setInviteCopied(false);
+  }, [activeCommunityId]);
+
+  const handleGenerateInvite = async () => {
+    if (!activeCommunityId) return;
+    setInviteLoading(true);
+    try {
+      const invite = await invitesApi.create(activeCommunityId);
+      setInviteCode(invite.code);
+      setInviteCopied(false);
+    } catch { /* ignore — likely no permission */ }
+    finally { setInviteLoading(false); }
+  };
+
+  const handleCopyInvite = async () => {
+    if (!inviteCode) return;
+    await navigator.clipboard.writeText(inviteCode);
+    setInviteCopied(true);
+    setTimeout(() => setInviteCopied(false), 2000);
+  };
 
   const handleChannelClick = async (channel: Channel) => {
     if (channel.type === 'voice') return;
@@ -32,97 +62,189 @@ export function ServerSidebar() {
     }
   };
 
-  // No server selected
-  if (!activeCommunity) {
-    return (
-      <div style={{ padding: 16, color: 'var(--outline)', fontSize: 13, textAlign: 'center', marginTop: 24 }}>
-        <span className="icon" style={{ fontSize: 40, opacity: 0.3, display: 'block', marginBottom: 8 }}>grid_view</span>
-        Выберите сервер
-        {communities.length === 0 && (
-          <button
-            onClick={() => setShowCreateCommunityModal(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '10px 16px',
-              borderRadius: 16,
-              border: 'none',
-              background: 'var(--primary)',
-              color: 'var(--on-primary)',
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              width: '100%',
-              justifyContent: 'center',
-              marginTop: 16,
-            }}
-          >
-            <span className="icon" style={{ fontSize: 16 }}>add</span>
-            Создать сервер
-          </button>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* Text channels */}
-      {textChannels.length > 0 && (
+      {/* Channel list for active community */}
+      {activeCommunity && (
         <>
-          <SectionLabel>
-            Каналы
-            <button
-              onClick={() => setShowCreateChannelModal(true)}
-              style={{ background: 'none', border: 'none', color: 'var(--outline)', cursor: 'pointer', padding: 2, borderRadius: 4 }}
-              title="Создать канал"
-            >
-              <span className="icon" style={{ fontSize: 14 }}>add</span>
-            </button>
-          </SectionLabel>
-          {textChannels.map((ch) => (
-            <ChannelItem
-              key={ch.id}
-              icon={ch.type === 'announcement' ? 'campaign' : 'tag'}
-              label={ch.name}
-              active={activeChannelId === ch.id}
-              onClick={() => void handleChannelClick(ch)}
-            />
-          ))}
-        </>
-      )}
-
-      {/* Voice channels */}
-      {voiceChannels.length > 0 && (
-        <>
-          <SectionLabel>Голос</SectionLabel>
-          {voiceChannels.map((ch) => (
-            <VoiceChannelItem key={ch.id} channel={ch} />
-          ))}
-        </>
-      )}
-
-      {/* Empty */}
-      {textChannels.length === 0 && voiceChannels.length === 0 && (
-        <div style={{ padding: '12px 16px', color: 'var(--outline)', fontSize: 13 }}>
-          Нет каналов
-          <br />
-          <button
-            onClick={() => setShowCreateChannelModal(true)}
+          {/* Community header with invite */}
+          <div
             style={{
-              marginTop: 8,
-              background: 'var(--primary-container)',
-              color: 'var(--primary)',
-              border: 'none',
-              borderRadius: 10,
-              padding: '6px 12px',
-              fontSize: 13,
-              cursor: 'pointer',
+              padding: '4px 12px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
             }}
           >
-            Создать канал
-          </button>
+            <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+              {activeCommunity.name}
+            </div>
+            <button
+              onClick={() => void handleGenerateInvite()}
+              disabled={inviteLoading}
+              title="Пригласить"
+              style={{
+                flexShrink: 0,
+                width: 30,
+                height: 30,
+                borderRadius: 10,
+                border: 'none',
+                background: 'rgba(255,255,255,0.07)',
+                color: 'var(--outline)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <span className="icon" style={{ fontSize: 16 }}>
+                {inviteLoading ? 'progress_activity' : 'person_add'}
+              </span>
+            </button>
+          </div>
+
+          {/* Invite code panel */}
+          {inviteCode && (
+            <div
+              style={{
+                margin: '0 8px 12px',
+                background: 'var(--surface-variant)',
+                borderRadius: 16,
+                padding: '10px 14px',
+                border: '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              <div style={{ fontSize: 10, color: 'var(--outline)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 6 }}>
+                Код приглашения
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <code
+                  style={{
+                    flex: 1,
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    background: 'rgba(0,0,0,0.3)',
+                    padding: '5px 10px',
+                    borderRadius: 8,
+                    color: 'var(--primary)',
+                    letterSpacing: '1px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {inviteCode}
+                </code>
+                <button
+                  onClick={() => void handleCopyInvite()}
+                  title={inviteCopied ? 'Скопировано!' : 'Копировать'}
+                  style={{
+                    flexShrink: 0,
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    border: 'none',
+                    background: inviteCopied ? 'var(--primary-container)' : 'rgba(255,255,255,0.07)',
+                    color: inviteCopied ? 'var(--primary)' : 'var(--outline)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <span className="icon" style={{ fontSize: 16 }}>
+                    {inviteCopied ? 'check' : 'content_copy'}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setInviteCode(null)}
+                  title="Закрыть"
+                  style={{
+                    flexShrink: 0,
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'var(--outline)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <span className="icon" style={{ fontSize: 16 }}>close</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Text channels */}
+          {textChannels.length > 0 && (
+            <>
+              <SectionLabel>
+                Каналы
+                <button
+                  onClick={() => setShowCreateChannelModal(true)}
+                  style={{ background: 'none', border: 'none', color: 'var(--outline)', cursor: 'pointer', padding: 2, borderRadius: 4 }}
+                  title="Создать канал"
+                >
+                  <span className="icon" style={{ fontSize: 14 }}>add</span>
+                </button>
+              </SectionLabel>
+              {textChannels.map((ch) => (
+                <ChannelItem
+                  key={ch.id}
+                  icon={ch.type === 'announcement' ? 'campaign' : 'tag'}
+                  label={ch.name}
+                  active={activeChannelId === ch.id}
+                  onClick={() => void handleChannelClick(ch)}
+                />
+              ))}
+            </>
+          )}
+
+          {/* Voice channels */}
+          {voiceChannels.length > 0 && (
+            <>
+              <SectionLabel>Голос</SectionLabel>
+              {voiceChannels.map((ch) => (
+                <VoiceChannelItem key={ch.id} channel={ch} />
+              ))}
+            </>
+          )}
+
+          {/* Empty */}
+          {textChannels.length === 0 && voiceChannels.length === 0 && (
+            <div style={{ padding: '12px 16px', color: 'var(--outline)', fontSize: 13 }}>
+              Нет каналов
+              <br />
+              <button
+                onClick={() => setShowCreateChannelModal(true)}
+                style={{
+                  marginTop: 8,
+                  background: 'var(--primary-container)',
+                  color: 'var(--primary)',
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: '6px 12px',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                Создать канал
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* No community selected */}
+      {!activeCommunity && (
+        <div style={{ padding: 16, color: 'var(--outline)', fontSize: 13, textAlign: 'center', marginTop: 24 }}>
+          <span className="icon" style={{ fontSize: 40, opacity: 0.3, display: 'block', marginBottom: 8 }}>grid_view</span>
+          {communities.length === 0 ? 'Нет серверов' : 'Выберите сервер'}
         </div>
       )}
     </div>

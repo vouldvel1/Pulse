@@ -21,9 +21,11 @@ interface UIState {
   showThemeModal: boolean;
   showCreateCommunityModal: boolean;
   showJoinCommunityModal: boolean;
+  showSearchCommunityModal: boolean;
   showSettingsModal: boolean;
   showCreateChannelModal: boolean;
   showInviteModal: boolean;
+  showFindUserModal: boolean;
   typingUsers: Record<string, { userId: string; username: string; expiry: number }[]>;
 
   setView: (view: View) => void;
@@ -32,9 +34,11 @@ interface UIState {
   setShowThemeModal: (show: boolean) => void;
   setShowCreateCommunityModal: (show: boolean) => void;
   setShowJoinCommunityModal: (show: boolean) => void;
+  setShowSearchCommunityModal: (show: boolean) => void;
   setShowSettingsModal: (show: boolean) => void;
   setShowCreateChannelModal: (show: boolean) => void;
   setShowInviteModal: (show: boolean) => void;
+  setShowFindUserModal: (show: boolean) => void;
   addTypingUser: (channelId: string, userId: string, username: string) => void;
   removeTypingUser: (channelId: string, userId: string) => void;
 }
@@ -57,9 +61,11 @@ export const useUIStore = create<UIState>((set) => ({
   showThemeModal: false,
   showCreateCommunityModal: false,
   showJoinCommunityModal: false,
+  showSearchCommunityModal: false,
   showSettingsModal: false,
   showCreateChannelModal: false,
   showInviteModal: false,
+  showFindUserModal: false,
   typingUsers: {},
 
   setView: (view) => set({ view }),
@@ -77,9 +83,11 @@ export const useUIStore = create<UIState>((set) => ({
   setShowThemeModal: (show) => set({ showThemeModal: show }),
   setShowCreateCommunityModal: (show) => set({ showCreateCommunityModal: show }),
   setShowJoinCommunityModal: (show) => set({ showJoinCommunityModal: show }),
+  setShowSearchCommunityModal: (show) => set({ showSearchCommunityModal: show }),
   setShowSettingsModal: (show) => set({ showSettingsModal: show }),
   setShowCreateChannelModal: (show) => set({ showCreateChannelModal: show }),
   setShowInviteModal: (show) => set({ showInviteModal: show }),
+  setShowFindUserModal: (show) => set({ showFindUserModal: show }),
 
   addTypingUser: (channelId, userId, username) => {
     const expiry = Date.now() + 5000;
