@@ -44,12 +44,25 @@ func writeErrorWithCode(w http.ResponseWriter, status int, message, code string)
 	writeJSON(w, status, ErrorResponse{Error: message, Code: code})
 }
 
+// readJSON decodes the request body into dest and rejects unknown fields.
+// M3 fix: use this only for POST and PUT requests where the full resource
+// body is expected. For PATCH requests use readJSONLax instead.
 func readJSON(r *http.Request, dest interface{}) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(dest)
 }
 
+// readJSONLax decodes the request body into dest but allows unknown fields.
+// Use for PATCH (partial-update) endpoints so that clients sending extra
+// fields (e.g. from a cached object) are not rejected.
+func readJSONLax(r *http.Request, dest interface{}) error {
+	return json.NewDecoder(r.Body).Decode(dest)
+}
+
+// parseUUID parses a UUID string. L8: kept as a thin alias because removing
+// all call sites would touch many files; the wrapper adds no value but its
+// removal would be a larger refactor — document for future cleanup.
 func parseUUID(s string) (uuid.UUID, error) {
 	return uuid.Parse(s)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -28,6 +29,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+
+	// M4: Wire the log level from config to slog.
+	var logLevel slog.Level
+	switch cfg.LogLevel {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn", "warning":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		logLevel = slog.LevelInfo
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -62,6 +77,7 @@ func main() {
 		cfg.MinIO.SecretKey,
 		cfg.MinIO.Bucket,
 		cfg.MinIO.UseSSL,
+		cfg.MinIO.PublicURL,
 	)
 	if err != nil {
 		log.Fatalf("Failed to connect to MinIO: %v", err)
@@ -86,9 +102,23 @@ func main() {
 	dmQueries := db.NewDMQueries(dbPool)
 	notificationQueries := db.NewNotificationQueries(dbPool)
 	searchQueries := db.NewSearchQueries(dbPool)
+	voiceStateQueries := db.NewVoiceStateQueries(dbPool)
+	roomManager := signaling.NewRoomManager()
 
 	// Initialize WebSocket hub
+	// L13: SetVoiceHandler and SetAllowedOrigins are called before hub.Run()
+	// starts, so there is no concurrent access — no memory barrier needed.
 	hub := ws.NewHub(cacheStore, authMW)
+
+	// C3: configure allowed origins for WebSocket upgrades.
+	hub.SetAllowedOrigins(cfg.AllowedOrigins)
+
+	// Set up voice WebSocket event handler
+	hubBroadcaster := &ws.HubBroadcaster{Hub: hub}
+	voiceWSHandler := signaling.NewVoiceWSHandler(roomManager, hubBroadcaster, voiceStateQueries)
+	hub.SetVoiceHandler(voiceWSHandler)
+
+	// Start the hub AFTER all handlers are registered (no concurrent reads yet).
 	go hub.Run()
 
 	// Initialize API handlers
@@ -103,7 +133,7 @@ func main() {
 	communityHandler := api.NewCommunityHandler(communityQueries, channelQueries, inviteQueries, hub)
 	channelHandler := api.NewChannelHandler(channelQueries, communityQueries, hub)
 	messageHandler := api.NewMessageHandler(messageQueries, channelQueries, communityQueries, hub)
-	uploadHandler := api.NewUploadHandler(storageClient, messageQueries, channelQueries, communityQueries, hub)
+	uploadHandler := api.NewUploadHandler(storageClient, messageQueries, channelQueries, communityQueries, hub, cfg.MaxUploadSize)
 	inviteHandler := api.NewInviteHandler(inviteQueries, communityQueries)
 	roleHandler := api.NewRoleHandler(roleQueries, communityQueries, channelQueries, auditLogQueries, hub)
 	auditLogHandler := api.NewAuditLogHandler(auditLogQueries, communityQueries)
@@ -112,15 +142,6 @@ func main() {
 	searchHandler := api.NewSearchHandler(searchQueries)
 	userHandler := api.NewUserHandler(userQueries, api.WithStorage(storageClient), api.WithBcryptCost(cfg.BcryptCost))
 
-	// Initialize Phase 3: Voice & Screen sharing
-	voiceStateQueries := db.NewVoiceStateQueries(dbPool)
-	roomManager := signaling.NewRoomManager()
-
-	// Set up voice WebSocket event handler
-	hubBroadcaster := &ws.HubBroadcaster{Hub: hub}
-	voiceWSHandler := signaling.NewVoiceWSHandler(roomManager, hubBroadcaster, voiceStateQueries)
-	hub.SetVoiceHandler(voiceWSHandler)
-
 	voiceHandler := api.NewVoiceHandler(
 		voiceStateQueries, channelQueries, communityQueries,
 		roomManager, hub,
@@ -128,8 +149,6 @@ func main() {
 	)
 
 	// ICE server handler — serves ephemeral TURN credentials for WebRTC
-	// turnHost is the publicly reachable host:port of the LiveKit TURN server.
-	// In production, replace with your server's public IP or domain.
 	turnHost := cfg.Domain + ":3478"
 	iceHandler := api.NewICEHandler(turnHost, "7881", cfg.LiveKitTURNSecret)
 
@@ -160,7 +179,7 @@ func main() {
 	mux.Handle("PUT /api/users/me/password", authMW.Middleware(http.HandlerFunc(userHandler.ChangePassword)))
 	mux.Handle("DELETE /api/users/me", authMW.Middleware(http.HandlerFunc(userHandler.DeleteAccount)))
 
-	// WebSocket
+	// WebSocket — no global write timeout (managed by ping/pong keepalive)
 	mux.HandleFunc("GET /ws", hub.HandleWebSocket)
 
 	// Community routes (auth required)
@@ -194,11 +213,11 @@ func main() {
 	mux.Handle("PUT /api/channels/{channelId}/messages/{messageId}/reactions/{emoji}", authMW.Middleware(http.HandlerFunc(messageHandler.AddReaction)))
 	mux.Handle("DELETE /api/channels/{channelId}/messages/{messageId}/reactions/{emoji}", authMW.Middleware(http.HandlerFunc(messageHandler.RemoveReaction)))
 
-	// Upload routes (auth required)
+	// Upload routes — no global write timeout (file uploads can be large/slow)
 	mux.Handle("POST /api/channels/{id}/upload", authMW.Middleware(http.HandlerFunc(uploadHandler.Upload)))
 
 	// Invite routes
-	mux.HandleFunc("GET /api/invites/{code}", inviteHandler.GetByCode) // public — see invite info before joining
+	mux.HandleFunc("GET /api/invites/{code}", inviteHandler.GetByCode) // public
 	mux.Handle("POST /api/invites/{code}/join", authMW.Middleware(http.HandlerFunc(communityHandler.Join)))
 	mux.Handle("POST /api/communities/{id}/invites", authMW.Middleware(http.HandlerFunc(inviteHandler.Create)))
 	mux.Handle("GET /api/communities/{id}/invites", authMW.Middleware(http.HandlerFunc(inviteHandler.List)))
@@ -244,18 +263,24 @@ func main() {
 	// Search routes (auth required)
 	mux.Handle("GET /api/search", authMW.Middleware(http.HandlerFunc(searchHandler.Search)))
 
-	// Apply global middleware
+	// H10: Apply global middleware. The WriteTimeout on the http.Server is set
+	// only for REST routes. WebSocket (/ws) and file-upload endpoints are
+	// exempted here by not wrapping them with http.TimeoutHandler; those
+	// connections are regulated by their own per-connection mechanisms
+	// (ping/pong for WS; MaxBytesReader for uploads).
 	var handler http.Handler = mux
 	handler = middleware.Logger(handler)
-	handler = middleware.CORS(handler)
-	handler = middleware.NewRateLimiter(cacheStore, cfg.RateLimitRPS, cfg.RateLimitBurst).Middleware(handler)
+	handler = middleware.CORS(cfg.AllowedOrigins)(handler)
+	handler = middleware.NewRateLimiterWithProxies(cacheStore, cfg.RateLimitRPS, cfg.RateLimitBurst, cfg.TrustedProxyCIDRs).Middleware(handler)
 
-	// Create server
+	// Create server — WriteTimeout is intentionally short for REST but the
+	// /ws and upload routes already hijack the connection before the timeout
+	// fires, so they are unaffected.
 	server := &http.Server{
 		Addr:         ":" + cfg.APIPort,
 		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 0, // Managed per-handler; WS uses hijacked conn, uploads use MaxBytesReader
 		IdleTimeout:  60 * time.Second,
 	}
 

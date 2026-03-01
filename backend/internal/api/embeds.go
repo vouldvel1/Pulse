@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -37,7 +38,9 @@ func ExtractURLs(content string) []string {
 
 // FetchEmbeds fetches Open Graph / meta tag info for a list of URLs.
 // This is done asynchronously and best-effort — failures are silently skipped.
-func FetchEmbeds(ctx context.Context, urls []string) []models.Embed {
+// L9 fix: uses a background context with a dedicated timeout so that the
+// goroutine is not cancelled when the HTTP handler returns.
+func FetchEmbeds(urls []string) []models.Embed {
 	if len(urls) == 0 {
 		return nil
 	}
@@ -49,7 +52,8 @@ func FetchEmbeds(ctx context.Context, urls []string) []models.Embed {
 
 	ch := make(chan result, len(urls))
 
-	fetchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	// L9: independent background context — handler returning does not cancel this.
+	fetchCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	for _, u := range urls {
@@ -73,10 +77,76 @@ func FetchEmbeds(ctx context.Context, urls []string) []models.Embed {
 	return embeds
 }
 
+// isPrivateIP returns true when ip falls in a loopback, link-local, or RFC-1918 range.
+// C5 fix: used to reject SSRF-capable targets before issuing any outbound request.
+func isPrivateIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	// Loopback
+	if ip.IsLoopback() {
+		return true
+	}
+	// Link-local (169.254.0.0/16 and fe80::/10)
+	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+	// Private IPv4 ranges
+	privateRanges := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"100.64.0.0/10",  // Shared address space (RFC 6598)
+		"127.0.0.0/8",    // Loopback (belt-and-suspenders)
+		"169.254.0.0/16", // Link-local
+		"::1/128",        // IPv6 loopback
+		"fc00::/7",       // IPv6 unique local
+	}
+	for _, cidr := range privateRanges {
+		_, ipNet, _ := net.ParseCIDR(cidr)
+		if ipNet != nil && ipNet.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// ssrfSafeDialer dials a TCP connection but rejects connections to private
+// or internal IP addresses.
+func ssrfSafeDialer(ctx context.Context, network, addr string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid address %q: %w", addr, err)
+	}
+
+	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %q: %w", host, err)
+	}
+
+	for _, ia := range ips {
+		if isPrivateIP(ia.IP) {
+			return nil, fmt.Errorf("request to private/internal address %s is not allowed", ia.IP)
+		}
+	}
+
+	// Dial using the first resolved IP to avoid TOCTOU between lookup and dial.
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no addresses resolved for %q", host)
+	}
+	dialer := &net.Dialer{}
+	return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+}
+
 // fetchOGData fetches a URL and extracts Open Graph meta tags.
 func fetchOGData(ctx context.Context, rawURL string) (models.Embed, error) {
+	// C5: use a transport with our SSRF-safe dialer.
+	transport := &http.Transport{
+		DialContext: ssrfSafeDialer,
+	}
 	client := &http.Client{
-		Timeout: 4 * time.Second,
+		Timeout:   4 * time.Second,
+		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
 				return fmt.Errorf("too many redirects")

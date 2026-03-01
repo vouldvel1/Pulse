@@ -113,7 +113,7 @@ func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
 	urls := ExtractURLs(req.Content)
 	if len(urls) > 0 {
 		go func() {
-			embeds := FetchEmbeds(r.Context(), urls)
+			embeds := FetchEmbeds(urls)
 			if len(embeds) > 0 {
 				embedPayload, marshalErr := json.Marshal(map[string]interface{}{
 					"message_id": msg.ID,

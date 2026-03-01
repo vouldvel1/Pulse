@@ -78,7 +78,14 @@ func (h *CommunityHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // Get handles GET /api/communities/{id}
+// M9 fix: for private communities, only members receive the full details.
 func (h *CommunityHandler) Get(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	communityID, err := parseUUID(r.PathValue("id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid community id")
@@ -94,6 +101,20 @@ func (h *CommunityHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if community == nil {
 		writeError(w, http.StatusNotFound, "community not found")
 		return
+	}
+
+	// M9: private communities may only be seen in full by members.
+	if community.Visibility == "private" {
+		isMember, err := h.communities.IsMember(r.Context(), userID, communityID)
+		if err != nil {
+			log.Printf("Error checking membership: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		if !isMember {
+			writeError(w, http.StatusForbidden, "not a member of this community")
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, community)
@@ -132,7 +153,7 @@ func (h *CommunityHandler) Update(w http.ResponseWriter, r *http.Request) {
 		BannerURL   *string `json:"banner_url"`
 		Visibility  *string `json:"visibility"`
 	}
-	if err := readJSON(r, &req); err != nil {
+	if err := readJSONLax(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -293,6 +314,8 @@ func (h *CommunityHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 }
 
 // Join handles POST /api/invites/{code}/join
+// C8 fix: validate the invite and add the member BEFORE incrementing the use
+// count, so a failed AddMember does not drain max_uses.
 func (h *CommunityHandler) Join(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserID(r.Context())
 	if !ok {
@@ -306,10 +329,10 @@ func (h *CommunityHandler) Join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use the invite (atomically validates and increments)
-	invite, err := h.invites.Use(r.Context(), code)
+	// Validate the invite (does not increment yet).
+	invite, err := h.invites.GetByCode(r.Context(), code)
 	if err != nil {
-		log.Printf("Error using invite: %v", err)
+		log.Printf("Error getting invite: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -318,7 +341,7 @@ func (h *CommunityHandler) Join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if already a member
+	// Check if already a member before consuming a use slot.
 	isMember, err := h.communities.IsMember(r.Context(), userID, invite.CommunityID)
 	if err != nil {
 		log.Printf("Error checking membership: %v", err)
@@ -330,11 +353,17 @@ func (h *CommunityHandler) Join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add member
+	// Add member first — only then increment the use count.
 	if err := h.communities.AddMember(r.Context(), userID, invite.CommunityID); err != nil {
 		log.Printf("Error adding member: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to join community")
 		return
+	}
+
+	// C8: increment use count only after a successful join.
+	if _, err := h.invites.Use(r.Context(), code); err != nil {
+		// Non-fatal: membership was already granted; log but continue.
+		log.Printf("Warning: failed to increment invite use count for code %s: %v", code, err)
 	}
 
 	// Get community for response

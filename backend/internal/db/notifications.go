@@ -2,11 +2,17 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/pulse-chat/pulse/internal/models"
 )
+
+// ErrNotificationNotFound is returned by MarkRead when the notification does
+// not exist or does not belong to the requesting user.
+// L15: allows the handler to return 404 instead of a generic 500.
+var ErrNotificationNotFound = errors.New("notification not found")
 
 // NotificationQueries contains database operations for notifications
 type NotificationQueries struct {
@@ -104,7 +110,9 @@ func (q *NotificationQueries) List(ctx context.Context, userID uuid.UUID, before
 	return notifications, nil
 }
 
-// MarkRead marks a single notification as read
+// MarkRead marks a single notification as read.
+// Returns ErrNotificationNotFound if the notification does not exist or does
+// not belong to userID, so callers can return 404 instead of 500.
 func (q *NotificationQueries) MarkRead(ctx context.Context, notifID, userID uuid.UUID) error {
 	result, err := q.pool.Exec(ctx, `
 		UPDATE notifications SET read = TRUE WHERE id = $1 AND user_id = $2
@@ -113,7 +121,7 @@ func (q *NotificationQueries) MarkRead(ctx context.Context, notifID, userID uuid
 		return fmt.Errorf("mark notification read: %w", err)
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("notification not found")
+		return ErrNotificationNotFound
 	}
 	return nil
 }
@@ -152,7 +160,9 @@ func (q *NotificationQueries) Delete(ctx context.Context, notifID, userID uuid.U
 	return nil
 }
 
-// CleanOld removes notifications older than a given number of days
+// CleanOld removes notifications older than a given number of days.
+// L3: This method is not currently called by any handler. It is retained for
+// use by a scheduled maintenance job or admin endpoint.
 func (q *NotificationQueries) CleanOld(ctx context.Context, days int) (int64, error) {
 	result, err := q.pool.Exec(ctx, `
 		DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '1 day' * $1

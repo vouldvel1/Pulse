@@ -10,9 +10,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  define: {
-    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || '/api'),
-    'import.meta.env.VITE_WS_URL': JSON.stringify(process.env.VITE_WS_URL || '/ws'),
-    'import.meta.env.VITE_APP_NAME': JSON.stringify(process.env.VITE_APP_NAME || 'Pulse'),
-  },
+  // VITE_* env vars are automatically exposed via import.meta.env by Vite.
+  // No manual `define` block needed — that would double-inject the values and
+  // can cause mismatches between `vite dev` and `vite build`.
 })

@@ -128,12 +128,15 @@ func GetUsername(ctx context.Context) (string, bool) {
 	return name, ok
 }
 
-// RateLimiter middleware using Redis
+// RateLimiter middleware using Redis sliding window.
+// trustedProxies is the set of CIDR subnets whose X-Real-IP / X-Forwarded-For
+// headers should be trusted. When empty, only r.RemoteAddr is used.
 type RateLimiter struct {
-	cache  *cache.Store
-	rps    int
-	burst  int
-	window time.Duration
+	cache          *cache.Store
+	rps            int
+	burst          int
+	window         time.Duration
+	trustedProxies []*net.IPNet
 }
 
 func NewRateLimiter(cache *cache.Store, rps, burst int) *RateLimiter {
@@ -141,18 +144,54 @@ func NewRateLimiter(cache *cache.Store, rps, burst int) *RateLimiter {
 		cache:  cache,
 		rps:    rps,
 		burst:  burst,
-		window: time.Second,
+		window: time.Second / time.Duration(max(rps, 1)),
 	}
+}
+
+// NewRateLimiterWithProxies creates a RateLimiter that trusts X-Real-IP from
+// the given proxy subnets (e.g. "10.0.0.0/8", "172.16.0.0/12").
+func NewRateLimiterWithProxies(cache *cache.Store, rps, burst int, trustedCIDRs []string) *RateLimiter {
+	rl := NewRateLimiter(cache, rps, burst)
+	for _, cidr := range trustedCIDRs {
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err == nil {
+			rl.trustedProxies = append(rl.trustedProxies, ipNet)
+		}
+	}
+	return rl
+}
+
+// clientIP returns the real client IP, only trusting proxy headers when the
+// direct peer address is within a trusted proxy subnet.
+func (rl *RateLimiter) clientIP(r *http.Request) string {
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteHost = r.RemoteAddr
+	}
+
+	if len(rl.trustedProxies) > 0 {
+		remoteIP := net.ParseIP(remoteHost)
+		for _, subnet := range rl.trustedProxies {
+			if remoteIP != nil && subnet.Contains(remoteIP) {
+				if forwarded := r.Header.Get("X-Real-IP"); forwarded != "" {
+					if ip := net.ParseIP(strings.TrimSpace(forwarded)); ip != nil {
+						return ip.String()
+					}
+				}
+				break
+			}
+		}
+	}
+
+	return remoteHost
 }
 
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := r.RemoteAddr
-		if forwarded := r.Header.Get("X-Real-IP"); forwarded != "" {
-			ip = forwarded
-		}
-
+		ip := rl.clientIP(r)
 		key := fmt.Sprintf("ratelimit:%s", ip)
+		// Use the configured window (derived from rps) so the actual refill
+		// rate matches the intended requests-per-second.
 		limited, err := rl.cache.RateLimit(r.Context(), key, rl.burst, rl.window)
 		if err != nil {
 			// On Redis error, allow the request through
@@ -170,22 +209,35 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// CORS middleware
-func CORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-Requested-With")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Max-Age", "86400")
+// CORS middleware reflects the request Origin (instead of using a wildcard)
+// so that credentials can be included while remaining browser-safe.
+// C1 fix: Access-Control-Allow-Credentials: true requires a specific origin,
+// not the wildcard "*". Reflect the request origin from an allowlist.
+func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
+	allowed := make(map[string]bool, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		allowed[o] = true
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" && allowed[origin] {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-Requested-With")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			w.Header().Add("Vary", "Origin")
 
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 
-		next.ServeHTTP(w, r)
-	})
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // Logger middleware logs HTTP requests
@@ -232,10 +284,21 @@ func (rw *responseWriter) Flush() {
 	}
 }
 
+// writeJSON is intentionally duplicated from api/helpers.go.
+// L1: the middleware and api packages cannot share a helper without creating a
+// circular import (api imports middleware for auth). Extracting to a third
+// shared package (e.g. httputil) is the correct long-term fix.
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		fmt.Printf("Error encoding JSON response: %v\n", err)
 	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

@@ -185,7 +185,7 @@ func (h *RoleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Color       *string `json:"color"`
 		Permissions *int64  `json:"permissions"`
 	}
-	if err := readJSON(r, &req); err != nil {
+	if err := readJSONLax(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -195,17 +195,11 @@ func (h *RoleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// M8 fix: default roles can also update name and color, not only permissions.
+	// Use the same UPDATE path for all roles; UpdateDefaultPermissions is now
+	// only used internally when no full Update is needed.
 	var role *models.Role
-	if existing.IsDefault {
-		// For the default role, only permissions can be updated
-		if req.Permissions == nil {
-			writeError(w, http.StatusBadRequest, "default role can only update permissions")
-			return
-		}
-		role, err = h.roles.UpdateDefaultPermissions(r.Context(), existing.CommunityID, *req.Permissions)
-	} else {
-		role, err = h.roles.Update(r.Context(), roleID, req.Name, req.Color, req.Permissions)
-	}
+	role, err = h.roles.Update(r.Context(), roleID, req.Name, req.Color, req.Permissions)
 	if err != nil {
 		log.Printf("Error updating role: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to update role")

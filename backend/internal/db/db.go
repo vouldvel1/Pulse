@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -105,7 +107,8 @@ func (p *Pool) RunMigrations(ctx context.Context, migrationsDir string) error {
 
 		if _, err := tx.Exec(ctx, string(content)); err != nil {
 			rbErr := tx.Rollback(ctx)
-			if rbErr != nil {
+			// L16: use errors.Is(pgx.ErrTxClosed) instead of fragile string comparison.
+			if rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
 				return fmt.Errorf("rollback failed for %s: %w (original: %v)", file, rbErr, err)
 			}
 			return fmt.Errorf("execute migration %s: %w", file, err)
@@ -113,7 +116,8 @@ func (p *Pool) RunMigrations(ctx context.Context, migrationsDir string) error {
 
 		if _, err := tx.Exec(ctx, "INSERT INTO schema_migrations (version) VALUES ($1)", version); err != nil {
 			rbErr := tx.Rollback(ctx)
-			if rbErr != nil {
+			// L16: use errors.Is(pgx.ErrTxClosed) instead of fragile string comparison.
+			if rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
 				return fmt.Errorf("rollback failed for %s: %w (original: %v)", file, rbErr, err)
 			}
 			return fmt.Errorf("record migration %s: %w", file, err)

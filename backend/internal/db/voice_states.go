@@ -10,6 +10,11 @@ import (
 	"github.com/pulse-chat/pulse/internal/models"
 )
 
+// ErrNotInVoice is returned by Leave when the user has no active voice state.
+// L12: use this sentinel instead of a generic error so callers can distinguish
+// "user was not in a channel" from actual DB failures.
+var ErrNotInVoice = errors.New("user not in a voice channel")
+
 // VoiceStateQueries handles voice state database operations
 type VoiceStateQueries struct {
 	pool *Pool
@@ -29,7 +34,8 @@ func (q *VoiceStateQueries) Join(ctx context.Context, userID, channelID, communi
 	}
 	defer func() {
 		rbErr := tx.Rollback(ctx)
-		if rbErr != nil && rbErr.Error() != "tx is closed" {
+		// L16: use errors.Is(pgx.ErrTxClosed) instead of fragile string comparison.
+		if rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
 			fmt.Printf("rollback error: %v\n", rbErr)
 		}
 	}()
@@ -62,7 +68,8 @@ func (q *VoiceStateQueries) Join(ctx context.Context, userID, channelID, communi
 	return &vs, nil
 }
 
-// Leave removes a user from their current voice channel
+// Leave removes a user from their current voice channel.
+// Returns ErrNotInVoice if the user has no active voice state row.
 func (q *VoiceStateQueries) Leave(ctx context.Context, userID uuid.UUID) (*models.VoiceState, error) {
 	var vs models.VoiceState
 	err := q.pool.QueryRow(ctx, `
@@ -74,22 +81,25 @@ func (q *VoiceStateQueries) Leave(ctx context.Context, userID uuid.UUID) (*model
 		&vs.Streaming, &vs.JoinedAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotInVoice
+		}
 		return nil, fmt.Errorf("delete voice state: %w", err)
 	}
 	return &vs, nil
 }
 
-// LeaveCleanup removes a user's voice state from the DB, ignoring "no rows" errors.
+// LeaveCleanup removes a user's voice state from the DB, ignoring ErrNotInVoice.
 // This is used by the WS disconnect handler to clean up stale state.
 func (q *VoiceStateQueries) LeaveCleanup(ctx context.Context, userID uuid.UUID) error {
 	_, err := q.Leave(ctx, userID)
 	if err != nil {
-		// If no row exists (already cleaned up by REST endpoint), that's fine
-		if errors.Is(err, pgx.ErrNoRows) {
+		// If no row exists (already cleaned up by REST endpoint), that's fine.
+		if errors.Is(err, ErrNotInVoice) {
 			return nil
 		}
-		// Best effort — any other error is non-fatal for disconnect cleanup
-		return nil
+		// Best effort — any other error is non-fatal for disconnect cleanup.
+		return err
 	}
 	return nil
 }

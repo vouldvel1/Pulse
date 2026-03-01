@@ -13,6 +13,14 @@ import type {
   VoiceParticipant,
 } from '@/types';
 
+// A hook point so external code (wsClient) can register a cleanup callback
+// to be called before the page redirects on auth failure.  This avoids a
+// circular import between api.ts and wsClient.ts.
+let _onAuthFailure: (() => void) | null = null;
+export function registerAuthFailureHandler(fn: () => void) {
+  _onAuthFailure = fn;
+}
+
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
 
 // ─── Token storage ────────────────────────────────────────────────────────────
@@ -80,6 +88,9 @@ async function request<T>(
       return request<T>(path, options, false);
     }
     clearTokens();
+    // Disconnect the WebSocket cleanly before navigating so the reconnect
+    // loop does not fire after the redirect with an invalidated token.
+    _onAuthFailure?.();
     window.location.href = '/login';
     throw new Error('Unauthorized');
   }

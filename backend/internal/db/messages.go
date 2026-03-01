@@ -75,6 +75,8 @@ func (q *MessageQueries) List(ctx context.Context, channelID uuid.UUID, before *
 	var err error
 
 	if before != nil {
+		// M2 fix: use composite (created_at, id) cursor to avoid skipping
+		// messages that share the same timestamp.
 		rows, err = q.pool.Query(ctx, `
 			SELECT m.id, m.channel_id, m.author_id, m.content, m.reply_to_id, m.pinned,
 			       m.edited_at, m.created_at,
@@ -82,8 +84,10 @@ func (q *MessageQueries) List(ctx context.Context, channelID uuid.UUID, before *
 			FROM messages m
 			JOIN users u ON m.author_id = u.id
 			WHERE m.channel_id = $1 AND m.deleted_at IS NULL
-			  AND m.created_at < (SELECT created_at FROM messages WHERE id = $2)
-			ORDER BY m.created_at DESC
+			  AND (m.created_at, m.id) < (
+			        SELECT created_at, id FROM messages WHERE id = $2
+			      )
+			ORDER BY m.created_at DESC, m.id DESC
 			LIMIT $3
 		`, channelID, *before, limit)
 	} else {

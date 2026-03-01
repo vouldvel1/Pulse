@@ -263,7 +263,9 @@ func (q *UserQueries) RevokeRefreshToken(ctx context.Context, id uuid.UUID) erro
 	return nil
 }
 
-// RevokeAllUserTokens revokes all refresh tokens for a user
+// RevokeAllUserTokens revokes all refresh tokens for a user.
+// L3: This method is not currently called by any handler. It is retained for
+// future use (e.g. "log out everywhere" or password-change invalidation).
 func (q *UserQueries) RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error {
 	_, err := q.pool.Exec(ctx, `
 		UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND revoked = FALSE

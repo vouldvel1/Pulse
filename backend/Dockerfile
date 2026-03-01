@@ -24,14 +24,16 @@ FROM golang:1.24-alpine AS dev
 WORKDIR /app
 
 # Install development dependencies
-RUN apk add --no-cache gcc musl-dev air
+RUN apk add --no-cache gcc musl-dev
 
 # Copy go module files
 COPY go.mod go.sum ./
 RUN go mod download
 
 # Install air for hot reload
-RUN go install github.com/air-verse/air@latest
+RUN go install github.com/air-verse/air@v1.61.7
+
+ENV PATH="/root/go/bin:${PATH}"
 
 # Copy source code
 COPY . .

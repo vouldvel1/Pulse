@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -179,10 +180,15 @@ func (h *VoiceHandler) LeaveVoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Remove from database
-	_, err := h.voiceQueries.Leave(r.Context(), userID)
-	if err != nil {
-		log.Printf("Error removing voice state from DB: %v", err)
+	// Remove from database.
+	// M7: in-memory RoomManager state is the authoritative source for active
+	// voice participants. A DB failure here (e.g. the row was already cleaned
+	// up by a disconnect webhook) must not prevent the REST response from
+	// succeeding — the user has already been removed from the in-memory room
+	// above. Log unexpected errors but ignore ErrNotInVoice (already cleaned).
+	_, dbErr := h.voiceQueries.Leave(r.Context(), userID)
+	if dbErr != nil && !errors.Is(dbErr, db.ErrNotInVoice) {
+		log.Printf("LeaveVoice: DB cleanup for user %s failed (non-fatal): %v", userID, dbErr)
 	}
 
 	// If user was screen sharing, broadcast stop
@@ -229,7 +235,7 @@ func (h *VoiceHandler) UpdateVoiceState(w http.ResponseWriter, r *http.Request) 
 		SelfMute bool `json:"self_mute"`
 		SelfDeaf bool `json:"self_deaf"`
 	}
-	if err := readJSON(r, &req); err != nil {
+	if err := readJSONLax(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

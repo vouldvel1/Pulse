@@ -1,10 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -17,23 +19,23 @@ import (
 	"github.com/pulse-chat/pulse/internal/ws"
 )
 
-const maxUploadSize = 25 << 20 // 25 MB
-
 type UploadHandler struct {
-	storage     *storage.Client
-	messages    *db.MessageQueries
-	channels    *db.ChannelQueries
-	communities *db.CommunityQueries
-	hub         *ws.Hub
+	storage       *storage.Client
+	messages      *db.MessageQueries
+	channels      *db.ChannelQueries
+	communities   *db.CommunityQueries
+	hub           *ws.Hub
+	maxUploadSize int64
 }
 
-func NewUploadHandler(storage *storage.Client, messages *db.MessageQueries, channels *db.ChannelQueries, communities *db.CommunityQueries, hub *ws.Hub) *UploadHandler {
+func NewUploadHandler(stor *storage.Client, messages *db.MessageQueries, channels *db.ChannelQueries, communities *db.CommunityQueries, hub *ws.Hub, maxUploadSize int64) *UploadHandler {
 	return &UploadHandler{
-		storage:     storage,
-		messages:    messages,
-		channels:    channels,
-		communities: communities,
-		hub:         hub,
+		storage:       stor,
+		messages:      messages,
+		channels:      channels,
+		communities:   communities,
+		hub:           hub,
+		maxUploadSize: maxUploadSize,
 	}
 }
 
@@ -79,8 +81,14 @@ func (h *UploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// M5: Use cfg.MaxUploadSize via h.maxUploadSize consistently; the old
+	// hardcoded 32<<20 is gone.
+	// H10: MaxBytesReader limits the body before parsing so large requests
+	// are rejected at the TCP level without buffering the full payload.
+	r.Body = http.MaxBytesReader(w, r.Body, h.maxUploadSize)
+
 	// Parse multipart form
-	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+	if err := r.ParseMultipartForm(h.maxUploadSize); err != nil {
 		writeErrorWithCode(w, http.StatusBadRequest, "file too large or invalid form data", "INVALID_UPLOAD")
 		return
 	}
@@ -92,23 +100,34 @@ func (h *UploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Validate file size
-	if header.Size > maxUploadSize {
-		writeErrorWithCode(w, http.StatusBadRequest, "file exceeds 25MB limit", "FILE_TOO_LARGE")
+	// Validate file size against configured limit
+	if header.Size > h.maxUploadSize {
+		writeErrorWithCode(w, http.StatusBadRequest, fmt.Sprintf("file exceeds %d byte limit", h.maxUploadSize), "FILE_TOO_LARGE")
 		return
 	}
 
-	// Validate MIME type
-	contentType := header.Header.Get("Content-Type")
-	if contentType == "" {
-		// Try to detect from extension
+	// H2: Detect MIME type from the first 512 bytes of the actual file body,
+	// not from the client-supplied Content-Type header.
+	sniffBuf := make([]byte, 512)
+	n, _ := file.Read(sniffBuf)
+	sniffBuf = sniffBuf[:n]
+	detectedType := http.DetectContentType(sniffBuf)
+
+	// Normalise — DetectContentType can return "application/octet-stream" for
+	// unknown types; in that case fall back to the extension mapping.
+	contentType := detectedType
+	if contentType == "application/octet-stream" {
 		ext := strings.ToLower(filepath.Ext(header.Filename))
 		contentType = mimeFromExt(ext)
 	}
+
 	if !storage.ValidateMimeType(contentType) {
 		writeErrorWithCode(w, http.StatusBadRequest, "file type not allowed", "INVALID_MIME_TYPE")
 		return
 	}
+
+	// Reconstruct the full reader (sniffed bytes + remainder of file body).
+	fullReader := io.MultiReader(bytes.NewReader(sniffBuf), file)
 
 	// Generate unique object name
 	randBytes := make([]byte, 16)
@@ -120,7 +139,7 @@ func (h *UploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	objectName := fmt.Sprintf("attachments/%s/%s%s", channelID, hex.EncodeToString(randBytes), ext)
 
 	// Upload to MinIO
-	fileURL, err := h.storage.Upload(r.Context(), objectName, file, header.Size, contentType)
+	fileURL, err := h.storage.Upload(r.Context(), objectName, fullReader, header.Size, contentType)
 	if err != nil {
 		log.Printf("Error uploading file: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to upload file")
@@ -170,8 +189,6 @@ func mimeFromExt(ext string) string {
 		return "image/gif"
 	case ".webp":
 		return "image/webp"
-	case ".svg":
-		return "image/svg+xml"
 	case ".mp4":
 		return "video/mp4"
 	case ".webm":

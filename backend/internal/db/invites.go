@@ -36,12 +36,33 @@ func (q *InviteQueries) Create(ctx context.Context, communityID, creatorID uuid.
 	return invite, nil
 }
 
-// GetByCode retrieves an invite by its code
-func (q *InviteQueries) GetByCode(ctx context.Context, code string) (*models.Invite, error) {
+// GetByID retrieves an invite by its UUID.
+func (q *InviteQueries) GetByID(ctx context.Context, id uuid.UUID) (*models.Invite, error) {
 	invite := &models.Invite{}
 	err := q.pool.QueryRow(ctx, `
 		SELECT id, code, community_id, creator_id, max_uses, uses, expires_at, created_at
-		FROM invites WHERE code = $1
+		FROM invites WHERE id = $1
+	`, id).Scan(
+		&invite.ID, &invite.Code, &invite.CommunityID, &invite.CreatorID,
+		&invite.MaxUses, &invite.Uses, &invite.ExpiresAt, &invite.CreatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get invite by id: %w", err)
+	}
+	return invite, nil
+}
+
+// GetByCode retrieves an invite by its code
+func (q *InviteQueries) GetByCode(ctx context.Context, code string) (*models.Invite, error) {
+	invite := &models.Invite{}
+	// L7: filter expired invites so callers cannot resolve stale codes.
+	err := q.pool.QueryRow(ctx, `
+		SELECT id, code, community_id, creator_id, max_uses, uses, expires_at, created_at
+		FROM invites
+		WHERE code = $1 AND (expires_at IS NULL OR expires_at > NOW())
 	`, code).Scan(
 		&invite.ID, &invite.Code, &invite.CommunityID, &invite.CreatorID,
 		&invite.MaxUses, &invite.Uses, &invite.ExpiresAt, &invite.CreatedAt,

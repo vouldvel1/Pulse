@@ -1,6 +1,22 @@
-import { getAccessToken } from './api';
+import { getAccessToken, registerAuthFailureHandler } from './api';
 
-const WS_BASE = import.meta.env.VITE_WS_URL ?? '/ws';
+// Resolve the WebSocket base URL.  VITE_WS_URL must be an absolute ws:// or
+// wss:// URL (e.g. wss://pulse.example.com/ws).  If a relative path is
+// supplied as a fallback (e.g. during Vite dev without the env var set), we
+// derive the absolute URL from window.location so new WebSocket() does not
+// throw "The URL's scheme must be either 'ws' or 'wss'".
+function resolveWsBase(): string {
+  const raw = import.meta.env.VITE_WS_URL as string | undefined;
+  if (raw && (raw.startsWith('ws://') || raw.startsWith('wss://'))) {
+    return raw;
+  }
+  // Derive from current page origin: http→ws, https→wss
+  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const path = raw && raw.startsWith('/') ? raw : '/ws';
+  return `${scheme}://${window.location.host}${path}`;
+}
+
+const WS_BASE = resolveWsBase();
 
 type EventHandler = (payload: Record<string, unknown>) => void;
 
@@ -123,3 +139,7 @@ class WebSocketClient {
 }
 
 export const wsClient = new WebSocketClient();
+
+// Register a cleanup hook so api.ts can disconnect the WebSocket before
+// redirecting to /login on auth failure, without creating a circular import.
+registerAuthFailureHandler(() => wsClient.disconnect());

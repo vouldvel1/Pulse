@@ -13,12 +13,15 @@ import (
 
 // Client wraps MinIO client for file storage
 type Client struct {
-	minio  *minio.Client
-	bucket string
+	minio     *minio.Client
+	bucket    string
+	publicURL string // Optional base URL for constructed file paths (e.g. https://cdn.example.com)
 }
 
-// New creates a new MinIO storage client
-func New(endpoint, accessKey, secretKey, bucket string, useSSL bool) (*Client, error) {
+// New creates a new MinIO storage client.
+// publicURL is an optional base URL used to construct the public-facing file
+// URL returned from Upload.  When empty the relative path "/storage/…" is used.
+func New(endpoint, accessKey, secretKey, bucket string, useSSL bool, publicURL string) (*Client, error) {
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: useSSL,
@@ -28,8 +31,9 @@ func New(endpoint, accessKey, secretKey, bucket string, useSSL bool) (*Client, e
 	}
 
 	return &Client{
-		minio:  client,
-		bucket: bucket,
+		minio:     client,
+		bucket:    bucket,
+		publicURL: publicURL,
 	}, nil
 }
 
@@ -64,7 +68,9 @@ func (c *Client) EnsureBucket(ctx context.Context) error {
 	return nil
 }
 
-// Upload uploads a file to MinIO
+// Upload uploads a file to MinIO and returns the public URL for the object.
+// L11: when publicURL is set the full URL is returned so that stored paths
+// remain valid even if the nginx prefix changes.
 func (c *Client) Upload(ctx context.Context, objectName string, reader io.Reader, size int64, contentType string) (string, error) {
 	_, err := c.minio.PutObject(ctx, c.bucket, objectName, reader, size, minio.PutObjectOptions{
 		ContentType: contentType,
@@ -73,6 +79,9 @@ func (c *Client) Upload(ctx context.Context, objectName string, reader io.Reader
 		return "", fmt.Errorf("upload file: %w", err)
 	}
 
+	if c.publicURL != "" {
+		return fmt.Sprintf("%s/%s/%s", c.publicURL, c.bucket, objectName), nil
+	}
 	return fmt.Sprintf("/storage/%s/%s", c.bucket, objectName), nil
 }
 
@@ -95,13 +104,14 @@ func (c *Client) Delete(ctx context.Context, objectName string) error {
 	return nil
 }
 
-// AllowedMimeTypes returns a set of allowed MIME types for upload validation
+// AllowedMimeTypes is the set of allowed MIME types for upload validation.
+// H3: SVG removed — SVG files can contain inline <script> tags causing stored XSS
+// when served with the browser's native renderer.
 var AllowedMimeTypes = map[string]bool{
 	"image/jpeg":        true,
 	"image/png":         true,
 	"image/gif":         true,
 	"image/webp":        true,
-	"image/svg+xml":     true,
 	"video/mp4":         true,
 	"video/webm":        true,
 	"audio/mpeg":        true,

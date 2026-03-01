@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -97,6 +98,12 @@ func (h *NotificationHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.notifications.MarkRead(r.Context(), notifID, userID); err != nil {
+		// L15: return 404 when the notification doesn't exist or belongs to
+		// a different user, rather than a misleading 500.
+		if errors.Is(err, db.ErrNotificationNotFound) {
+			writeError(w, http.StatusNotFound, "notification not found")
+			return
+		}
 		log.Printf("Error marking notification read: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to mark as read")
 		return

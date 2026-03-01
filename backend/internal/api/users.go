@@ -130,7 +130,7 @@ func (h *UserHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		Username     *string `json:"username"`
 		Email        *string `json:"email"`
 	}
-	if err := readJSON(r, &req); err != nil {
+	if err := readJSONLax(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

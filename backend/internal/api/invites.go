@@ -126,6 +126,8 @@ func (h *InviteHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // Delete handles DELETE /api/invites/{id}
+// C4 fix: look up the invite, then verify the caller is the creator or holds
+// ManageInvites / Admin permission on the community before deleting.
 func (h *InviteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserID(r.Context())
 	if !ok {
@@ -139,24 +141,38 @@ func (h *InviteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the invite to find its community
-	invite, err := h.invites.GetByCode(r.Context(), "") // We need GetByID, use a workaround
-	_ = invite
-	// Actually, we don't have GetByID. Let's just use the fact that we can verify via community perms
-	// after looking up the invite. For now, we'll delete directly and rely on route-level auth.
+	// Look up the invite by ID so we can check ownership and community.
+	invite, err := h.invites.GetByID(r.Context(), inviteID)
+	if err != nil {
+		log.Printf("Error fetching invite: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if invite == nil {
+		writeError(w, http.StatusNotFound, "invite not found")
+		return
+	}
 
-	// Since we can't look up invite by ID with our current queries,
-	// we need the community context. Let's add a simple permission check.
-	// For the MVP, the auth middleware ensures the user is authenticated.
-	// A more robust check would look up the invite's community and verify permissions.
+	// Allow if the caller is the invite creator.
+	if invite.CreatorID != userID {
+		// Otherwise require ManageInvites or Admin permission.
+		perms, err := h.communities.GetMemberPermissions(r.Context(), userID, invite.CommunityID)
+		if err != nil {
+			log.Printf("Error checking permissions: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		if perms&models.PermManageCommunity == 0 && perms&models.PermAdmin == 0 {
+			writeError(w, http.StatusForbidden, "missing permission: manage invites")
+			return
+		}
+	}
 
 	if err := h.invites.Delete(r.Context(), inviteID); err != nil {
 		log.Printf("Error deleting invite: %v", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete invite")
 		return
 	}
-
-	_ = userID // Used for auth check above
 
 	writeJSON(w, http.StatusOK, SuccessResponse{Message: "invite deleted"})
 }

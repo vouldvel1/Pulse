@@ -20,10 +20,21 @@ func NewDMQueries(pool *Pool) *DMQueries {
 
 // CreateDMChannel creates a 1-on-1 DM channel between two users.
 // If a DM channel already exists between them, returns the existing one.
+//
+// L10 fix: the check-then-create is performed inside a SERIALIZABLE transaction
+// to prevent concurrent requests from the same two users creating duplicate DM
+// channels. The SELECT is repeated inside the transaction after acquiring the
+// isolation level, so no race window exists.
 func (q *DMQueries) CreateDMChannel(ctx context.Context, userA, userB uuid.UUID) (*models.DMChannelWithMembers, error) {
-	// Check if a non-group DM already exists between these two users
+	tx, err := q.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return nil, fmt.Errorf("begin dm create tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Check (inside the serializable transaction) whether a DM already exists.
 	var existingID uuid.UUID
-	err := q.pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		SELECT dc.id
 		FROM dm_channels dc
 		JOIN dm_channel_members m1 ON dc.id = m1.channel_id AND m1.user_id = $1
@@ -32,20 +43,15 @@ func (q *DMQueries) CreateDMChannel(ctx context.Context, userA, userB uuid.UUID)
 		LIMIT 1
 	`, userA, userB).Scan(&existingID)
 	if err == nil {
-		// Already exists, return it
+		// Already exists — commit the read-only tx and return the existing channel.
+		_ = tx.Commit(ctx)
 		return q.GetDMChannel(ctx, existingID, userA)
 	}
 	if err != pgx.ErrNoRows {
 		return nil, fmt.Errorf("check existing dm: %w", err)
 	}
 
-	// Create new DM channel
-	tx, err := q.pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin dm create tx: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
+	// No existing DM — create one.
 	var channelID uuid.UUID
 	err = tx.QueryRow(ctx, `
 		INSERT INTO dm_channels (is_group) VALUES (FALSE) RETURNING id
@@ -164,7 +170,9 @@ func (q *DMQueries) GetDMChannel(ctx context.Context, channelID, userID uuid.UUI
 	return ch, nil
 }
 
-// ListDMChannels lists all DM channels a user belongs to, ordered by most recent message
+// ListDMChannels lists all DM channels a user belongs to, ordered by most recent message.
+// H8 fix: members are batch-fetched with a single JOIN query instead of one
+// query per channel (the previous N+1 pattern).
 func (q *DMQueries) ListDMChannels(ctx context.Context, userID uuid.UUID) ([]*models.DMChannelWithMembers, error) {
 	rows, err := q.pool.Query(ctx, `
 		SELECT dc.id, dc.name, dc.is_group, dc.owner_id, dc.created_at
@@ -182,41 +190,53 @@ func (q *DMQueries) ListDMChannels(ctx context.Context, userID uuid.UUID) ([]*mo
 	defer rows.Close()
 
 	var channels []*models.DMChannelWithMembers
+	var channelIDs []uuid.UUID
 	for rows.Next() {
 		ch := &models.DMChannelWithMembers{}
 		if err := rows.Scan(&ch.ID, &ch.Name, &ch.IsGroup, &ch.OwnerID, &ch.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan dm channel: %w", err)
 		}
 		channels = append(channels, ch)
+		channelIDs = append(channelIDs, ch.ID)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate dm channels: %w", err)
 	}
 
-	// Populate members for each channel
-	for _, ch := range channels {
-		memberRows, err := q.pool.Query(ctx, `
-			SELECT u.id, u.username, u.display_name, u.avatar_url, u.status
-			FROM dm_channel_members dcm
-			JOIN users u ON dcm.user_id = u.id
-			WHERE dcm.channel_id = $1
-		`, ch.ID)
-		if err != nil {
-			return nil, fmt.Errorf("get members for dm %s: %w", ch.ID, err)
-		}
+	if len(channels) == 0 {
+		return channels, nil
+	}
 
-		for memberRows.Next() {
-			var u models.User
-			if err := memberRows.Scan(&u.ID, &u.Username, &u.DisplayName, &u.AvatarURL, &u.Status); err != nil {
-				memberRows.Close()
-				return nil, fmt.Errorf("scan member: %w", err)
-			}
+	// H8: single batch query to fetch all members across all channels.
+	memberRows, err := q.pool.Query(ctx, `
+		SELECT dcm.channel_id, u.id, u.username, u.display_name, u.avatar_url, u.status
+		FROM dm_channel_members dcm
+		JOIN users u ON dcm.user_id = u.id
+		WHERE dcm.channel_id = ANY($1)
+	`, channelIDs)
+	if err != nil {
+		return nil, fmt.Errorf("batch get dm members: %w", err)
+	}
+	defer memberRows.Close()
+
+	// Index channels by ID for O(1) lookup when distributing members.
+	channelByID := make(map[uuid.UUID]*models.DMChannelWithMembers, len(channels))
+	for _, ch := range channels {
+		channelByID[ch.ID] = ch
+	}
+
+	for memberRows.Next() {
+		var channelID uuid.UUID
+		var u models.User
+		if err := memberRows.Scan(&channelID, &u.ID, &u.Username, &u.DisplayName, &u.AvatarURL, &u.Status); err != nil {
+			return nil, fmt.Errorf("scan dm member: %w", err)
+		}
+		if ch, ok := channelByID[channelID]; ok {
 			ch.Members = append(ch.Members, u)
 		}
-		memberRows.Close()
-		if err := memberRows.Err(); err != nil {
-			return nil, fmt.Errorf("iterate members: %w", err)
-		}
+	}
+	if err := memberRows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate dm members: %w", err)
 	}
 
 	return channels, nil
@@ -304,6 +324,7 @@ func (q *DMQueries) ListDMMessages(ctx context.Context, channelID uuid.UUID, bef
 	var err error
 
 	if before != nil {
+		// M2 fix: use composite (created_at, id) cursor to avoid skipping tied messages.
 		rows, err = q.pool.Query(ctx, `
 			SELECT m.id, m.channel_id, m.author_id, m.content, m.reply_to_id,
 			       m.edited_at, m.created_at,
@@ -311,8 +332,10 @@ func (q *DMQueries) ListDMMessages(ctx context.Context, channelID uuid.UUID, bef
 			FROM dm_messages m
 			JOIN users u ON m.author_id = u.id
 			WHERE m.channel_id = $1 AND m.deleted_at IS NULL
-			  AND m.created_at < (SELECT created_at FROM dm_messages WHERE id = $2)
-			ORDER BY m.created_at DESC
+			  AND (m.created_at, m.id) < (
+			        SELECT created_at, id FROM dm_messages WHERE id = $2
+			      )
+			ORDER BY m.created_at DESC, m.id DESC
 			LIMIT $3
 		`, channelID, *before, limit)
 	} else {
